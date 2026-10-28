@@ -8,10 +8,12 @@ const _log = AppLog('AlbumUpdateChecker');
 class AlbumUpdateResult {
   final List<Episode> newEpisodes;
   final int onlineEpisodeCount;
+  final String coverUrl;
 
   const AlbumUpdateResult({
     required this.newEpisodes,
     required this.onlineEpisodeCount,
+    this.coverUrl = '',
   });
 
   bool get hasUpdates => newEpisodes.isNotEmpty;
@@ -35,6 +37,7 @@ class AlbumUpdateChecker {
     _log.i('check: dramaId=$dramaId');
     final html = await _fetchDetail(dramaId);
     final episodes = _parser.parseEpisodes(html);
+    final coverUrl = _parser.parseDetailCover(html);
     final newEpisodes = episodes
         .where(
           (episode) =>
@@ -49,6 +52,7 @@ class AlbumUpdateChecker {
     return AlbumUpdateResult(
       newEpisodes: newEpisodes,
       onlineEpisodeCount: episodes.length,
+      coverUrl: coverUrl,
     );
   }
 }

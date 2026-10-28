@@ -58,13 +58,21 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
   }
 
   Future<void> _setScreenMode(bool fullscreen) async {
+    final platform = Theme.of(context).platform;
+    final supportsOrientationLock =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+    if (!supportsOrientationLock) return;
     try {
+      final aspectRatio = widget.controller?.value.aspectRatio ?? 0;
+      final isLandscape = aspectRatio <= 0 || aspectRatio >= 1;
       await SystemChrome.setPreferredOrientations(
         fullscreen
-            ? [
-                DeviceOrientation.landscapeLeft,
-                DeviceOrientation.landscapeRight,
-              ]
+            ? isLandscape
+                  ? [
+                      DeviceOrientation.landscapeLeft,
+                      DeviceOrientation.landscapeRight,
+                    ]
+                  : [DeviceOrientation.portraitUp]
             : [DeviceOrientation.portraitUp],
       );
       await SystemChrome.setEnabledSystemUIMode(

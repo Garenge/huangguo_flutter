@@ -25,6 +25,64 @@ void main() {
     expect(items.single.remark, '更新至2集 · 8.8分');
   });
 
+  test('parses channel tabs and selects the matching card panel', () {
+    const html = '''
+      <section data-channel-page data-active-tab="latest">
+        <div class="hg-channel-tabs">
+          <button class="hg-channel-tabs__item is-active" data-tab="latest">最新更新</button>
+          <button class="hg-channel-tabs__item" data-tab="hot">当前热播</button>
+          <button class="hg-channel-tabs__item" data-tab="original">独家原创</button>
+          <button class="hg-channel-tabs__item" data-tab="random">随机推荐</button>
+        </div>
+        <div class="hg-card-grid" data-channel-panel="latest">
+          <a class="hg-drama-card" href="/video/1001/">
+            <img src="/latest.jpg">
+            <h3 class="hg-drama-card__title">最新条目</h3>
+          </a>
+        </div>
+        <div class="hg-card-grid" data-channel-panel="hot">
+          <a class="hg-drama-card" href="/video/1002/">
+            <img src="/hot.jpg">
+            <h3 class="hg-drama-card__title">热门条目</h3>
+          </a>
+        </div>
+      </section>
+    ''';
+
+    final tabs = parser.parseChannelTabs(html);
+    final hotItems = parser.parseCardList(html, false, channelTabId: 'hot');
+
+    expect(tabs.map((tab) => '${tab.id}:${tab.name}'), [
+      'latest:最新更新',
+      'hot:当前热播',
+      'original:独家原创',
+      'random:随机推荐',
+    ]);
+    expect(hotItems, hasLength(1));
+    expect(hotItems.single.id, '1002');
+    expect(hotItems.single.name, '热门条目');
+  });
+
+  test('keeps the first-grid fallback when no channel tab is specified', () {
+    const html = '''
+      <div class="hg-card-grid">
+        <a class="hg-drama-card" href="/video/1001/">
+          <h3 class="hg-drama-card__title">第一组</h3>
+        </a>
+      </div>
+      <div class="hg-card-grid">
+        <a class="hg-drama-card" href="/video/1002/">
+          <h3 class="hg-drama-card__title">第二组</h3>
+        </a>
+      </div>
+    ''';
+
+    final items = parser.parseCardList(html, false);
+
+    expect(items, hasLength(1));
+    expect(items.single.id, '1001');
+  });
+
   test('parses video links in rank items', () {
     const html = '''
       <div class="hg-rank-list">
@@ -56,5 +114,28 @@ void main() {
     expect(episodes, hasLength(1));
     expect(episodes.single.ep, '1');
     expect(episodes.single.url, '/play/9936/1/');
+  });
+
+  test('parses cover from video detail pages', () {
+    const html = '''
+      <div class="hg-web-detail">
+        <img data-original="/detail-cover.jpg">
+      </div>
+    ''';
+
+    expect(parser.parseDetailCover(html), '/detail-cover.jpg');
+  });
+
+  test('prefers the detail page cover over other images', () {
+    const html = '''
+      <div class="hg-web-detail__cover">
+        <img data-lazy-src="/detail-cover.jpg">
+      </div>
+      <div class="hg-web-play">
+        <img src="/episode-image.jpg">
+      </div>
+    ''';
+
+    expect(parser.parseDetailCover(html), '/detail-cover.jpg');
   });
 }

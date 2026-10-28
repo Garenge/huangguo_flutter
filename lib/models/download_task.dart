@@ -9,6 +9,7 @@ class DownloadTask {
   final String id;
   final String dramaId;
   final String dramaName;
+  final String dramaPic;
   final String episodeName;
   final String episodeUrl;
   final String ep;
@@ -28,6 +29,7 @@ class DownloadTask {
     required this.id,
     required this.dramaId,
     required this.dramaName,
+    this.dramaPic = '',
     required this.episodeName,
     required this.episodeUrl,
     required this.ep,
@@ -46,6 +48,7 @@ class DownloadTask {
     'id': id,
     'dramaId': dramaId,
     'dramaName': dramaName,
+    'dramaPic': dramaPic,
     'episodeName': episodeName,
     'episodeUrl': SiteAddress.relative(episodeUrl, episode: true),
     'ep': ep,
@@ -72,6 +75,7 @@ class DownloadTask {
       id: json['id'] as String,
       dramaId: json['dramaId'] as String,
       dramaName: json['dramaName'] as String,
+      dramaPic: json['dramaPic'] as String? ?? '',
       episodeName: json['episodeName'] as String,
       episodeUrl: SiteAddress.relative(
         json['episodeUrl'] as String,

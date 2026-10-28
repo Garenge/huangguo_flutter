@@ -36,6 +36,7 @@ class DetailPage extends StatefulWidget {
 
 class _DetailPageState extends State<DetailPage> {
   List<Episode> _episodes = [];
+  final Map<String, DownloadStatus> _observedTaskStatuses = {};
   bool _isLoading = true;
   bool _isAddingAll = false;
   String? _errorMessage;
@@ -44,6 +45,9 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void initState() {
     super.initState();
+    for (final task in widget.downloadService.tasks) {
+      _observedTaskStatuses[task.id] = task.status;
+    }
     widget.downloadService.addListener(_onDownloadServiceChanged);
     _log.i('initState: drama=${widget.drama.name}, id=${widget.drama.id}');
     _loadDetail();
@@ -56,7 +60,33 @@ class _DetailPageState extends State<DetailPage> {
   }
 
   void _onDownloadServiceChanged() {
-    if (mounted) setState(() {});
+    final completedEpisodes = <String>[];
+    final activeTaskIds = <String>{};
+    for (final task in widget.downloadService.tasks) {
+      activeTaskIds.add(task.id);
+      final previousStatus = _observedTaskStatuses[task.id];
+      if (task.status == DownloadStatus.completed &&
+          previousStatus != null &&
+          previousStatus != DownloadStatus.completed) {
+        completedEpisodes.add(task.episodeName);
+      }
+      _observedTaskStatuses[task.id] = task.status;
+    }
+    _observedTaskStatuses.removeWhere(
+      (taskId, _) => !activeTaskIds.contains(taskId),
+    );
+
+    if (!mounted) return;
+    setState(() {});
+    for (final episodeName in completedEpisodes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('下载完成：$episodeName'),
+          backgroundColor: Colors.green[700],
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Future<void> _loadDetail() async {
@@ -66,10 +96,15 @@ class _DetailPageState extends State<DetailPage> {
       _errorMessage = null;
     });
     try {
-      final results = await Future.wait([_loadEpisodes(), _loadImage()]);
+      final html = await widget.api.fetchDetail(widget.drama.id);
+      final episodes = widget.htmlParser.parseEpisodes(html);
+      final coverUrl = widget.htmlParser.parseDetailCover(html);
+      final image = await _loadImage(
+        coverUrl.isNotEmpty ? coverUrl : widget.drama.pic,
+      );
       setState(() {
-        _episodes = results[0] as List<Episode>;
-        _decryptedImage = results[1] as Uint8List?;
+        _episodes = episodes;
+        _decryptedImage = image;
         _isLoading = false;
       });
       _log.i('_loadDetail: success, episodes=${_episodes.length}');
@@ -82,15 +117,10 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  Future<List<Episode>> _loadEpisodes() async {
-    final html = await widget.api.fetchDetail(widget.drama.id);
-    return widget.htmlParser.parseEpisodes(html);
-  }
-
-  Future<Uint8List?> _loadImage() async {
-    if (widget.drama.pic.isEmpty) return null;
+  Future<Uint8List?> _loadImage(String imageUrl) async {
+    if (imageUrl.isEmpty) return null;
     try {
-      final bytes = await widget.api.fetchImageBytes(widget.drama.pic);
+      final bytes = await widget.api.fetchImageBytes(imageUrl);
       return widget.imageDecryptor.decrypt(Uint8List.fromList(bytes));
     } catch (e, stack) {
       _log.e('_loadImage: failed', e, stack);
@@ -370,7 +400,7 @@ class _DetailPageState extends State<DetailPage> {
   }
 }
 
-/// 带下载按钮的剧集芯片
+/// 带独立播放区和下载按钮的剧集条目。
 class _EpisodeChip extends StatelessWidget {
   final Episode episode;
   final DownloadStatus? downloadStatus;
@@ -393,45 +423,63 @@ class _EpisodeChip extends StatelessWidget {
         downloadStatus == DownloadStatus.downloading ||
         downloadStatus == DownloadStatus.paused;
     final statusIcon = isDownloaded
-        ? const Icon(Icons.check_circle_rounded, size: 14, color: Colors.green)
+        ? const Icon(Icons.check_circle_rounded, size: 16, color: Colors.green)
         : isInProgress
-        ? const Icon(Icons.downloading_rounded, size: 14, color: Colors.orange)
+        ? const Icon(Icons.downloading_rounded, size: 16, color: Colors.orange)
         : null;
 
-    return ActionChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (statusIcon != null) ...[statusIcon, const SizedBox(width: 4)],
-          Text(
-            episode.name,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-          ),
-          if (!isDownloaded) ...[
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: onDownload,
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
+    return Material(
+      color: isDownloaded
+          ? Colors.green.withOpacity(0.16)
+          : Colors.white.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
                 ),
-                child: const Icon(
-                  Icons.download_rounded,
-                  size: 14,
-                  color: Colors.orange,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (statusIcon != null) ...[
+                      statusIcon,
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      episode.name,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ],
                 ),
               ),
             ),
+            if (!isDownloaded)
+              IconButton(
+                onPressed: isInProgress ? null : onDownload,
+                icon: Icon(
+                  isInProgress
+                      ? Icons.downloading_rounded
+                      : Icons.download_rounded,
+                  size: 19,
+                ),
+                color: Colors.orange,
+                disabledColor: Colors.orange.withOpacity(0.7),
+                tooltip: isInProgress ? '下载中' : '下载${episode.name}',
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              ),
           ],
-        ],
+        ),
       ),
-      backgroundColor: isDownloaded
-          ? Colors.green.withOpacity(0.16)
-          : Colors.white.withOpacity(0.1),
-      side: BorderSide.none,
-      onPressed: onTap,
     );
   }
 }

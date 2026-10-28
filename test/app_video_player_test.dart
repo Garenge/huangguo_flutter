@@ -23,6 +23,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
         home: Scaffold(
           body: ValueListenableBuilder<TestVideoController>(
             valueListenable: source,
@@ -60,6 +61,94 @@ void main() {
     await first.dispose();
     await second.dispose();
     source.dispose();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    );
+  });
+
+  testWidgets('portrait fullscreen keeps the device in portrait', (
+    tester,
+  ) async {
+    final controller = TestVideoController(size: const Size(1080, 1920));
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.android),
+        home: Scaffold(
+          body: SizedBox(
+            height: 240,
+            child: AppVideoPlayer(controller: controller, title: '竖屏'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('全屏'));
+    await tester.pumpAndSettle();
+    expect(
+      calls
+          .where(
+            (call) => call.method == 'SystemChrome.setPreferredOrientations',
+          )
+          .first
+          .arguments,
+      ['DeviceOrientation.portraitUp'],
+    );
+    await tester.tap(find.byTooltip('退出全屏'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await controller.dispose();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    );
+  });
+
+  testWidgets('macOS keeps the fullscreen route without mobile system modes', (
+    tester,
+  ) async {
+    final controller = TestVideoController();
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.macOS),
+        home: Scaffold(
+          body: SizedBox(
+            height: 240,
+            child: AppVideoPlayer(controller: controller, title: 'Mac 视频'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('全屏'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mac 视频'), findsOneWidget);
+    expect(
+      calls.where(
+        (call) =>
+            call.method == 'SystemChrome.setPreferredOrientations' ||
+            call.method == 'SystemChrome.setEnabledSystemUIMode',
+      ),
+      isEmpty,
+    );
+    await tester.tap(find.byTooltip('退出全屏'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await controller.dispose();
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       null,

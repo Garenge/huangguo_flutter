@@ -13,6 +13,7 @@ void main() {
         parser: HtmlParser(api.site),
         fetchDetail: (_) async => '''
         <div class="hg-web-play__ep-grid">
+          <img data-src="/detail-cover.jpg">
           <a href="/play/1/1/" data-ep-id="1">第1集</a>
           <a href="/play/1/2/" data-ep-id="2">第2集</a>
           <a href="/play/1/3/" data-ep-id="3">第3集</a>
@@ -28,6 +29,7 @@ void main() {
       expect(result.onlineEpisodeCount, 3);
       expect(result.newEpisodes, hasLength(1));
       expect(result.newEpisodes.single.ep, '2');
+      expect(result.coverUrl, '/detail-cover.jpg');
       api.dispose();
     },
   );

@@ -49,8 +49,13 @@ class _HomePageState extends State<HomePage> {
 
   SourceConfig? _sourceConfig;
   List<Drama> _dramas = [];
+  List<TabItem> _channelTabs = [];
   String _selectedTab = 'home';
+  String _selectedChannelTab = 'latest';
   int _currentPage = 1;
+  String? _loadedHtml;
+  String? _loadedHtmlTab;
+  int? _loadedHtmlPage;
   bool _isLoadingSource = true;
   bool _isLoading = false;
   String? _errorMessage;
@@ -140,7 +145,7 @@ class _HomePageState extends State<HomePage> {
     _log.i('_onSourceReady: site=${config.site}, tabs=${config.tabs.length}');
   }
 
-  Future<void> _loadList() async {
+  Future<void> _loadList({bool forceFetch = true}) async {
     _log.i('_loadList: tab=$_selectedTab, page=$_currentPage');
     setState(() {
       _isLoading = true;
@@ -148,20 +153,42 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final html = await widget.api.fetchCategory(_selectedTab, _currentPage);
+      final canReuseHtml =
+          !forceFetch &&
+          _loadedHtml != null &&
+          _loadedHtmlTab == _selectedTab &&
+          _loadedHtmlPage == _currentPage;
+      final html = canReuseHtml
+          ? _loadedHtml!
+          : await widget.api.fetchCategory(_selectedTab, _currentPage);
+      if (!canReuseHtml) {
+        _loadedHtml = html;
+        _loadedHtmlTab = _selectedTab;
+        _loadedHtmlPage = _currentPage;
+      }
       final isRank = _selectedTab.contains('rank');
       final isHome = _selectedTab == 'home';
+      final channelTabs = _htmlParser.parseChannelTabs(html);
 
       List<Drama> items;
       if (isRank) {
         items = _htmlParser.parseRankList(html);
       } else {
-        items = _htmlParser.parseCardList(html, isHome);
+        final activeChannelTab =
+            channelTabs.any((tab) => tab.id == _selectedChannelTab)
+            ? _selectedChannelTab
+            : (channelTabs.isNotEmpty ? channelTabs.first.id : null);
+        items = _htmlParser.parseCardList(
+          html,
+          isHome,
+          channelTabId: activeChannelTab,
+        );
       }
 
       if (!mounted) return;
       _log.i('_loadList: parsed ${items.length} items');
       setState(() {
+        _channelTabs = channelTabs;
         _dramas = items;
         _isLoading = false;
         _statusMessage = '解析到 ${items.length} 个条目';
@@ -180,9 +207,19 @@ class _HomePageState extends State<HomePage> {
     _log.i('_onTabChanged: $tabId');
     setState(() {
       _selectedTab = tabId;
+      _selectedChannelTab = 'latest';
+      _channelTabs = [];
       _currentPage = 1;
     });
     _loadList();
+  }
+
+  void _onChannelTabChanged(String tabId) {
+    _log.i('_onChannelTabChanged: $tabId');
+    setState(() {
+      _selectedChannelTab = tabId;
+    });
+    _loadList(forceFetch: false);
   }
 
   void _onPageChanged(int delta) {
@@ -228,6 +265,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           _buildStatusBar(),
           if (_sourceConfig != null) _buildCategoryTabs(),
+          if (_channelTabs.isNotEmpty) _buildChannelTabs(),
           Expanded(child: _buildContent()),
           if (_sourceConfig != null) _buildPagination(),
         ],
@@ -293,6 +331,41 @@ class _HomePageState extends State<HomePage> {
               selected: isSelected,
               onSelected: (_) => _onTabChanged(tab.id),
               selectedColor: Colors.orange,
+              backgroundColor: Colors.grey[850],
+              checkmarkColor: Colors.black,
+              side: BorderSide.none,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildChannelTabs() {
+    return SizedBox(
+      height: 40,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        itemCount: _channelTabs.length,
+        itemBuilder: (_, index) {
+          final tab = _channelTabs[index];
+          final isSelected = tab.id == _selectedChannelTab;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(
+                tab.name,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.black : Colors.white70,
+                ),
+              ),
+              selected: isSelected,
+              onSelected: (_) => _onChannelTabChanged(tab.id),
+              selectedColor: Colors.lightBlueAccent,
               backgroundColor: Colors.grey[850],
               checkmarkColor: Colors.black,
               side: BorderSide.none,

@@ -6,12 +6,15 @@ class TestVideoController extends VideoPlayerController {
   final List<Duration> seeks = [];
   final List<double> speeds = [];
 
-  TestVideoController({bool playing = true, double speed = 1})
-    : super.networkUrl(Uri.parse('https://example.com/test.mp4')) {
+  TestVideoController({
+    bool playing = true,
+    double speed = 1,
+    Size size = const Size(1920, 1080),
+  }) : super.networkUrl(Uri.parse('https://example.com/test.mp4')) {
     value = VideoPlayerValue(
       duration: const Duration(minutes: 10),
       position: const Duration(seconds: 60),
-      size: const Size(1920, 1080),
+      size: size,
       isInitialized: true,
       isPlaying: playing,
       playbackSpeed: speed,

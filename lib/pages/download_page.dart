@@ -47,6 +47,7 @@ class _DownloadPageState extends State<DownloadPage>
   final Set<String> _convertingGroups = {};
   final Set<String> _checkingAlbums = {};
   final Map<String, int> _albumUpdates = {};
+  final Map<String, String> _albumCoverUrls = {};
   final Map<String, DateTime> _lastAlbumCheckAt = {};
   final Map<String, String> _conversionStatus = {};
   final Map<String, int> _conversionCompleted = {};
@@ -69,6 +70,7 @@ class _DownloadPageState extends State<DownloadPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_onTabChanged);
     _conversionService = VideoConversionService(widget.downloadService);
     _updateChecker = AlbumUpdateChecker(
       api: widget.api,
@@ -88,6 +90,7 @@ class _DownloadPageState extends State<DownloadPage>
     _automaticCheckTimer?.cancel();
     widget.downloadService.removeListener(_onServiceChanged);
     _completedScrollController.dispose();
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -95,6 +98,10 @@ class _DownloadPageState extends State<DownloadPage>
   void _onServiceChanged() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  void _onTabChanged() {
+    if (mounted) setState(() {});
   }
 
   DownloadService get _ds => widget.downloadService;
@@ -111,6 +118,10 @@ class _DownloadPageState extends State<DownloadPage>
       appBar: AppBar(
         title: const Text('下载管理'),
         backgroundColor: const Color(0xFF0D0D0D),
+        actions: [
+          if (_tabController.index == 1 && _ds.completedTasks.isNotEmpty)
+            _buildAlbumToggleButton(),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.orange,
@@ -130,6 +141,29 @@ class _DownloadPageState extends State<DownloadPage>
         children: [_buildDownloadingTab(), _buildCompletedTab()],
       ),
     );
+  }
+
+  Widget _buildAlbumToggleButton() {
+    final albumKeys = _completedAlbums().keys.toSet();
+    final allCollapsed = albumKeys.every(_collapsedAlbums.contains);
+    return TextButton.icon(
+      onPressed: () => _toggleAllAlbums(albumKeys, allCollapsed),
+      icon: Icon(
+        allCollapsed ? Icons.unfold_more_rounded : Icons.unfold_less_rounded,
+      ),
+      label: Text(allCollapsed ? '全部展开' : '全部折叠'),
+      style: TextButton.styleFrom(foregroundColor: Colors.orange),
+    );
+  }
+
+  void _toggleAllAlbums(Set<String> albumKeys, bool allCollapsed) {
+    setState(() {
+      if (allCollapsed) {
+        _collapsedAlbums.removeAll(albumKeys);
+      } else {
+        _collapsedAlbums.addAll(albumKeys);
+      }
+    });
   }
 
   Widget _buildDownloadingTab() {
@@ -219,6 +253,7 @@ class _DownloadPageState extends State<DownloadPage>
 
   void _pruneAlbumCheckState(Set<String> activeKeys) {
     _albumUpdates.removeWhere((key, _) => !activeKeys.contains(key));
+    _albumCoverUrls.removeWhere((key, _) => !activeKeys.contains(key));
     _lastAlbumCheckAt.removeWhere((key, _) => !activeKeys.contains(key));
     _checkingAlbums.removeWhere((key) => !activeKeys.contains(key));
   }
@@ -312,33 +347,41 @@ class _DownloadPageState extends State<DownloadPage>
     int updateCount,
     bool isChecking,
   ) {
-    return TextButton.icon(
-      onPressed: isChecking
-          ? null
-          : updateCount > 0
-          ? () => _openAlbumDetail(tasks)
-          : () => _checkAlbum(dramaKey, tasks),
-      icon: isChecking
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : const Icon(Icons.sync_rounded, size: 16),
-      label: Text(
-        isChecking
-            ? '检测中'
-            : updateCount > 0
-            ? '更新 $updateCount'
-            : '检测',
-        style: const TextStyle(fontSize: 12),
-      ),
-      style: TextButton.styleFrom(
-        foregroundColor: updateCount > 0
-            ? Colors.lightBlueAccent
-            : Colors.orange,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton.icon(
+          onPressed: isChecking ? null : () => _checkAlbum(dramaKey, tasks),
+          icon: isChecking
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.sync_rounded, size: 16),
+          label: Text(
+            isChecking ? '检测中' : '检测',
+            style: const TextStyle(fontSize: 12),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.orange,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+        ),
+        if (updateCount > 0)
+          TextButton.icon(
+            onPressed: isChecking ? null : () => _openAlbumDetail(tasks),
+            icon: const Icon(Icons.system_update_alt_rounded, size: 16),
+            label: Text(
+              '更新 $updateCount',
+              style: const TextStyle(fontSize: 12),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.lightBlueAccent,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+          ),
+      ],
     );
   }
 
@@ -647,6 +690,9 @@ class _DownloadPageState extends State<DownloadPage>
       if (!mounted) return;
       setState(() {
         _albumUpdates[dramaKey] = result.newEpisodes.length;
+        if (result.coverUrl.isNotEmpty) {
+          _albumCoverUrls[dramaKey] = result.coverUrl;
+        }
         _lastAlbumCheckAt[dramaKey] = DateTime.now();
         _checkingAlbums.remove(dramaKey);
       });
@@ -676,7 +722,7 @@ class _DownloadPageState extends State<DownloadPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 1),
         action: updateCount > 0
             ? SnackBarAction(
                 label: '查看',
@@ -690,8 +736,14 @@ class _DownloadPageState extends State<DownloadPage>
   void _openAlbumDetail(List<DownloadTask> tasks) {
     if (tasks.isEmpty) return;
     final task = tasks.first;
+    final dramaKey = '${task.dramaName} (${task.dramaId})';
+    final coverUrl =
+        _albumCoverUrls[dramaKey] ??
+        tasks
+            .firstWhere((item) => item.dramaPic.isNotEmpty, orElse: () => task)
+            .dramaPic;
     widget.onOpenDetail(
-      Drama(id: task.dramaId, name: task.dramaName, pic: '', remark: ''),
+      Drama(id: task.dramaId, name: task.dramaName, pic: coverUrl, remark: ''),
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart' as dom;
 import '../models/drama.dart';
 import '../models/episode.dart';
+import '../models/source_config.dart';
 import 'app_log.dart';
 import 'site_address.dart';
 
@@ -39,18 +40,49 @@ class HtmlParser {
 
   // ---------- Card Parsing ----------
 
-  List<Drama> parseCardList(String html, bool allGrids) {
+  List<TabItem> parseChannelTabs(String html) {
     final document = html_parser.parse(html);
-    final grids = document.querySelectorAll('.hg-card-grid');
+    final tabs = <TabItem>[];
+    final seen = <String>{};
+
+    for (final button in document.querySelectorAll(
+      '.hg-channel-tabs__item[data-tab]',
+    )) {
+      final id = button.attributes['data-tab']?.trim() ?? '';
+      final name = stripTags(button.text);
+      if (id.isEmpty || name.isEmpty || !seen.add(id)) continue;
+      tabs.add(TabItem(name: name, id: id));
+    }
+
+    _log.i('parseChannelTabs: ${tabs.length} channel tabs');
+    return tabs;
+  }
+
+  List<Drama> parseCardList(
+    String html,
+    bool allGrids, {
+    String? channelTabId,
+  }) {
+    final document = html_parser.parse(html);
+    final grids = channelTabId == null
+        ? document.querySelectorAll('.hg-card-grid')
+        : document.querySelectorAll(
+            '.hg-card-grid[data-channel-panel="$channelTabId"]',
+          );
     if (grids.isEmpty) {
-      _log.w('parseCardList: no .hg-card-grid found');
+      _log.w(
+        'parseCardList: no .hg-card-grid found'
+        '${channelTabId == null ? '' : ' for channel=$channelTabId'}',
+      );
       return [];
     }
 
     final seen = <String>{};
     final list = <Drama>[];
 
-    final gridsToProcess = allGrids ? grids : [grids.first];
+    final gridsToProcess = channelTabId != null
+        ? grids
+        : (allGrids ? grids : [grids.first]);
     for (final grid in gridsToProcess) {
       final cards = grid.querySelectorAll('.hg-drama-card');
       _log.d('parseCardList: found ${cards.length} cards in grid');
@@ -202,6 +234,38 @@ class HtmlParser {
       _log.i('parseEpisodes: ${episodes.length} episodes');
     }
     return episodes;
+  }
+
+  String parseDetailCover(String html) {
+    final document = html_parser.parse(html);
+    final meta = document.querySelector(
+      'meta[property="og:image"], meta[name="twitter:image"]',
+    );
+    final metaUrl = meta?.attributes['content'];
+    if (metaUrl != null && metaUrl.isNotEmpty) return imgSrc(metaUrl);
+
+    final image = document.querySelector(
+      '.hg-web-detail__cover img, '
+      '.hg-web-detail__poster img, '
+      '.hg-web-detail img, '
+      '.hg-web-play__cover img, '
+      '.hg-web-play img, '
+      '[class*="detail"] img, '
+      '[class*="play"] img',
+    );
+    if (image == null) return '';
+
+    for (final attribute in [
+      'data-src',
+      'data-original',
+      'data-lazy-src',
+      'data-image',
+      'src',
+    ]) {
+      final url = image.attributes[attribute];
+      if (url != null && url.isNotEmpty) return imgSrc(url);
+    }
+    return '';
   }
 
   // ---------- Play URL Parsing ----------

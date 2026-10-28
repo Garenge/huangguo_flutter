@@ -379,13 +379,34 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   }
 
   List<Widget> _buildPlayback(VideoPlayerValue value, double width) {
+    final aspectRatio = value.aspectRatio > 0 ? value.aspectRatio : 16 / 9;
+    final isMobilePlatform =
+        Theme.of(context).platform == TargetPlatform.android ||
+        Theme.of(context).platform == TargetPlatform.iOS;
+    final widthFitPortrait =
+        widget.fullscreen && isMobilePlatform && aspectRatio < 1;
     return [
-      Center(
-        child: AspectRatio(
-          aspectRatio: value.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
-          child: VideoPlayer(_controller!),
+      if (widthFitPortrait)
+        Center(
+          child: OverflowBox(
+            maxWidth: width,
+            maxHeight: double.infinity,
+            child: SizedBox(
+              width: width,
+              child: AspectRatio(
+                aspectRatio: aspectRatio,
+                child: VideoPlayer(_controller!),
+              ),
+            ),
+          ),
+        )
+      else
+        Center(
+          child: AspectRatio(
+            aspectRatio: aspectRatio,
+            child: VideoPlayer(_controller!),
+          ),
         ),
-      ),
       Positioned.fill(child: _buildGestureLayer(width)),
       if (!_visible)
         Positioned(
