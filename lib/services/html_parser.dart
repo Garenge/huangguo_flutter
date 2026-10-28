@@ -1,0 +1,261 @@
+import 'dart:convert';
+
+import 'package:html/parser.dart' as html_parser;
+import 'package:html/dom.dart' as dom;
+import '../models/drama.dart';
+import '../models/episode.dart';
+import 'app_log.dart';
+
+const _log = AppLog('HtmlParser');
+
+class HtmlParser {
+  String _site;
+  static final _dramaIdPattern = RegExp(r'/(?:video|detail)/(\d+)(?:/|$)');
+
+  HtmlParser(this._site);
+
+  void updateSite(String site) {
+    _site = site;
+    _log.i('site updated: $site');
+  }
+
+  // ---------- Utilities ----------
+
+  String fix(String? url) {
+    if (url == null || url.isEmpty) return '';
+    if (url.startsWith('//')) return 'https:$url';
+    if (url.startsWith('/')) return '$_site$url';
+    return url;
+  }
+
+  String imgSrc(String? url) {
+    final fixed = fix(url);
+    if (fixed.startsWith('http') && fixed.contains('?')) {
+      return fixed.replaceAll(RegExp('\\?.*'), '');
+    }
+    return fixed;
+  }
+
+  String stripTags(String s) {
+    return s.replaceAll(RegExp('<[^>]*>'), '').trim();
+  }
+
+  // ---------- Card Parsing ----------
+
+  List<Drama> parseCardList(String html, bool allGrids) {
+    final document = html_parser.parse(html);
+    final grids = document.querySelectorAll('.hg-card-grid');
+    if (grids.isEmpty) {
+      _log.w('parseCardList: no .hg-card-grid found');
+      return [];
+    }
+
+    final seen = <String>{};
+    final list = <Drama>[];
+
+    final gridsToProcess = allGrids ? grids : [grids.first];
+    for (final grid in gridsToProcess) {
+      final cards = grid.querySelectorAll('.hg-drama-card');
+      _log.d('parseCardList: found ${cards.length} cards in grid');
+      for (final card in cards) {
+        final drama = _parseCardBlock(card);
+        if (drama != null && seen.add(drama.id)) {
+          list.add(drama);
+        }
+      }
+    }
+
+    _log.i('parseCardList: ${list.length} unique dramas');
+    return list;
+  }
+
+  Drama? _parseCardBlock(dom.Element card) {
+    final link = _findDramaLink(card);
+    if (link == null) return null;
+    final href = link.attributes['href'] ?? '';
+    final idMatch = _dramaIdPattern.firstMatch(href);
+    if (idMatch == null) return null;
+    final id = idMatch.group(1)!;
+
+    String? pic;
+    final img = card.querySelector('img');
+    if (img != null) {
+      pic = img.attributes['data-src'] ?? img.attributes['src'];
+    }
+
+    final titleEl = card.querySelector('.hg-drama-card__title');
+    String? title = titleEl != null ? stripTags(titleEl.text) : null;
+    title ??= stripTags(link.text);
+
+    final epEl = card.querySelector('.hg-drama-card__episode');
+    final scoreEl = card.querySelector('.hg-drama-card__score');
+    final ep = epEl != null ? stripTags(epEl.text) : '';
+    final score = scoreEl != null ? stripTags(scoreEl.text) : '';
+    final remark = [ep, score].where((s) => s.isNotEmpty).join(' \u00b7 ');
+
+    return Drama(id: id, name: title, pic: imgSrc(pic), remark: remark);
+  }
+
+  dom.Element? _findDramaLink(dom.Element element) {
+    if (element.localName == 'a' &&
+        (element.attributes['href']?.contains('/video/') == true ||
+            element.attributes['href']?.contains('/detail/') == true)) {
+      return element;
+    }
+    return element.querySelector('a[href*="/video/"]') ??
+        element.querySelector('a[href*="/detail/"]');
+  }
+
+  // ---------- Rank List Parsing ----------
+
+  List<Drama> parseRankList(String html) {
+    final document = html_parser.parse(html);
+    final rankList = document.querySelector('.hg-rank-list');
+    if (rankList == null) {
+      _log.w('parseRankList: no .hg-rank-list found');
+      return [];
+    }
+
+    final items = rankList.querySelectorAll('.hg-rank-item');
+    _log.d('parseRankList: found ${items.length} rank items');
+    final seen = <String>{};
+    final list = <Drama>[];
+
+    for (final item in items) {
+      final link = _findDramaLink(item);
+      if (link == null) continue;
+      final href = link.attributes['href'] ?? '';
+      final idMatch = _dramaIdPattern.firstMatch(href);
+      if (idMatch == null || !seen.add(idMatch.group(1)!)) continue;
+      final id = idMatch.group(1)!;
+
+      final titleEl = item.querySelector('.hg-rank-item__title');
+      String? title = titleEl != null ? stripTags(titleEl.text) : null;
+      title ??= stripTags(link.text);
+
+      final img = item.querySelector('img');
+      final pic = img?.attributes['data-src'] ?? img?.attributes['src'];
+
+      final tagsEl = item.querySelector('.hg-rank-item__tags');
+      final tags = tagsEl != null ? stripTags(tagsEl.text) : '';
+
+      list.add(Drama(id: id, name: title, pic: imgSrc(pic), remark: tags));
+    }
+
+    _log.i('parseRankList: ${list.length} unique dramas');
+    return list;
+  }
+
+  // ---------- Episode Parsing ----------
+
+  List<Episode> parseEpisodes(String html) {
+    final document = html_parser.parse(html);
+    final episodes = <Episode>[];
+
+    final epGrid =
+        document.querySelector(
+          '.hg-web-play__ep-grid, .hg-web-detail__ep-grid',
+        ) ??
+        document.querySelector('[data-web-play-ep-grid]');
+    if (epGrid != null) {
+      final links = epGrid.querySelectorAll('a');
+      _log.d('parseEpisodes: found ${links.length} episode links');
+      for (final link in links) {
+        final href = link.attributes['href'];
+        if (href == null) continue;
+        final epId = link.attributes['data-ep-id'] ?? '';
+        final text = stripTags(link.text);
+        final parsedEp = epId.isNotEmpty
+            ? epId
+            : (RegExp(r'\d+').firstMatch(text)?.group(0) ?? '');
+        final name = parsedEp.isNotEmpty
+            ? '\u7b2c${int.parse(parsedEp)}\u96c6'
+            : text;
+        episodes.add(
+          Episode(
+            name: name,
+            url: fix(href),
+            ep: parsedEp.isNotEmpty ? '${int.parse(parsedEp)}' : '',
+          ),
+        );
+      }
+    }
+
+    if (episodes.isEmpty) {
+      final playLink = document.querySelector(
+        '.hg-web-detail__play, .hg-web-play__play',
+      );
+      if (playLink != null) {
+        final href = playLink.attributes['href'];
+        if (href != null) {
+          episodes.add(Episode(name: '\u7b2c1\u96c6', url: fix(href), ep: '1'));
+        }
+      }
+    }
+
+    if (episodes.isEmpty) {
+      _log.w('parseEpisodes: no episodes found');
+    } else {
+      _log.i('parseEpisodes: ${episodes.length} episodes');
+    }
+    return episodes;
+  }
+
+  // ---------- Play URL Parsing ----------
+
+  String parsePlayUrl(String html, {String ep = '1'}) {
+    final scriptMatch = RegExp(
+      '<script\\s+id="videoInitialData"[^>]*>([\\s\\S]*?)</script>',
+    ).firstMatch(html);
+
+    if (scriptMatch == null) {
+      _log.e('parsePlayUrl: videoInitialData script not found');
+      throw Exception('videoInitialData script not found');
+    }
+
+    final jsonStr = scriptMatch.group(1)!.trim();
+    _log.d('parsePlayUrl: videoInitialData found, ${jsonStr.length} chars');
+
+    String? play;
+    try {
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final epPlaySrcs = data['epPlaySrcs'];
+      if (epPlaySrcs is Map) {
+        play =
+            epPlaySrcs[ep]?.toString() ??
+            epPlaySrcs[int.tryParse(ep)]?.toString();
+        if (play != null && play.isNotEmpty) {
+          _log.d('parsePlayUrl: found epPlaySrcs[$ep]');
+        }
+      }
+      if (play == null || play.isEmpty) {
+        play = data['videoSrc']?.toString();
+        if (play != null && play.isNotEmpty) {
+          _log.d('parsePlayUrl: found videoSrc');
+        }
+      }
+    } catch (e) {
+      _log.w('parsePlayUrl: invalid videoInitialData JSON: $e');
+    }
+
+    if (play == null || play.isEmpty) {
+      _log.e('parsePlayUrl: no play URL found in json');
+      throw Exception('Play URL not found');
+    }
+
+    play = play.replaceAll('\\u0026', '&');
+
+    if (!play.startsWith('http')) {
+      final urlMatch = RegExp('(https?://[^\\s"\\\']+)').firstMatch(play);
+      if (urlMatch != null) {
+        play = urlMatch.group(1)!;
+      } else {
+        _log.e('parsePlayUrl: invalid URL format: $play');
+        throw Exception('Invalid play URL format: $play');
+      }
+    }
+
+    _log.i('parsePlayUrl: $play');
+    return play;
+  }
+}

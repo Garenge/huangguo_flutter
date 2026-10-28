@@ -1,0 +1,31 @@
+name: huangguo_flutter
+description: "黄果短剧 - 跨平台短剧浏览器"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  archive: ^4.3.0
+  dio: ^5.4.0
+  html: ^0.15.4
+  encrypt: ^5.0.3
+  video_player: ^2.8.0
+  path_provider: ^2.1.0
+  cupertino_icons: ^1.0.8
+  ffmpeg_kit_flutter_new: ^4.6.2
+  share_plus: ^10.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/huangguo_fallback.js

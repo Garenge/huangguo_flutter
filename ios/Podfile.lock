@@ -1,0 +1,38 @@
+PODS:
+  - ffmpeg_kit_flutter_new (8.1.2):
+    - ffmpeg_kit_flutter_new/full-gpl (= 8.1.2)
+    - Flutter
+  - ffmpeg_kit_flutter_new/full-gpl (8.1.2):
+    - Flutter
+  - Flutter (1.0.0)
+  - share_plus (0.0.1):
+    - Flutter
+  - video_player_avfoundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - ffmpeg_kit_flutter_new (from `.symlinks/plugins/ffmpeg_kit_flutter_new/ios`)
+  - Flutter (from `Flutter`)
+  - share_plus (from `.symlinks/plugins/share_plus/ios`)
+  - video_player_avfoundation (from `.symlinks/plugins/video_player_avfoundation/darwin`)
+
+EXTERNAL SOURCES:
+  ffmpeg_kit_flutter_new:
+    :path: ".symlinks/plugins/ffmpeg_kit_flutter_new/ios"
+  Flutter:
+    :path: Flutter
+  share_plus:
+    :path: ".symlinks/plugins/share_plus/ios"
+  video_player_avfoundation:
+    :path: ".symlinks/plugins/video_player_avfoundation/darwin"
+
+SPEC CHECKSUMS:
+  ffmpeg_kit_flutter_new: 8e5a0264340036d40065839eeba280efae216c47
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  share_plus: 50da8cb520a8f0f65671c6c6a99b3617ed10a58a
+  video_player_avfoundation: 3453f792138786248960ca029747fcd9f318ef52
+
+PODFILE CHECKSUM: 4b015915ec662986b54bf30ab778da63f7dda016
+
+COCOAPODS: 1.16.2

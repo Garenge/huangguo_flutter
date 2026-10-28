@@ -1,0 +1,38 @@
+PODS:
+  - ffmpeg_kit_flutter_new (8.1.2):
+    - ffmpeg_kit_flutter_new/full-gpl (= 8.1.2)
+    - FlutterMacOS
+  - ffmpeg_kit_flutter_new/full-gpl (8.1.2):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+  - share_plus (0.0.1):
+    - FlutterMacOS
+  - video_player_avfoundation (0.0.1):
+    - Flutter
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - ffmpeg_kit_flutter_new (from `Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_new/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
+  - video_player_avfoundation (from `Flutter/ephemeral/.symlinks/plugins/video_player_avfoundation/darwin`)
+
+EXTERNAL SOURCES:
+  ffmpeg_kit_flutter_new:
+    :path: Flutter/ephemeral/.symlinks/plugins/ffmpeg_kit_flutter_new/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  share_plus:
+    :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
+  video_player_avfoundation:
+    :path: Flutter/ephemeral/.symlinks/plugins/video_player_avfoundation/darwin
+
+SPEC CHECKSUMS:
+  ffmpeg_kit_flutter_new: 26a446b2926c061000aa81e69ac836bc29c9e652
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  share_plus: 510bf0af1a42cd602274b4629920c9649c52f4cc
+  video_player_avfoundation: 3453f792138786248960ca029747fcd9f318ef52
+
+PODFILE CHECKSUM: 561fd0563568131ed3f09843fee96c105133644a
+
+COCOAPODS: 1.16.2
