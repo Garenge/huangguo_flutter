@@ -21,7 +21,7 @@ void main() {
     expect(items, hasLength(1));
     expect(items.single.id, '9936');
     expect(items.single.name, '示例视频');
-    expect(items.single.pic, 'https://huangguoai.com/cover.jpg');
+    expect(items.single.pic, '/cover.jpg');
     expect(items.single.remark, '更新至2集 · 8.8分');
   });
 
@@ -55,6 +55,6 @@ void main() {
 
     expect(episodes, hasLength(1));
     expect(episodes.single.ep, '1');
-    expect(episodes.single.url, 'https://huangguoai.com/play/9936/1/');
+    expect(episodes.single.url, '/play/9936/1/');
   });
 }

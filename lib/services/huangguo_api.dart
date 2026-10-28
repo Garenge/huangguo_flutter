@@ -7,6 +7,7 @@ import 'app_log.dart';
 import 'proxy_dio.dart';
 import 'network_failure.dart';
 import 'source_loader.dart';
+import 'site_address.dart';
 
 const _log = AppLog('HuangguoApi');
 
@@ -30,11 +31,13 @@ class HuangguoApi extends ChangeNotifier {
   }
 
   void updateConfig(SourceConfig config) {
+    SiteAddress.register(config.site);
     _config = config;
     _log.i('config updated: site=${config.site}, tabs=${config.tabs.length}');
   }
 
   void updateSite(String site) {
+    SiteAddress.register(site);
     if (site == this.site) return;
     _siteOverride = site;
     _log.i('site updated: $site');
@@ -169,12 +172,14 @@ class HuangguoApi extends ChangeNotifier {
 
   Future<String> fetchDetail(String dramaId) => _get('$site/video/$dramaId/');
 
-  Future<String> fetchPlayPage(String url) => _get(url, referer: site);
+  Future<String> fetchPlayPage(String url) =>
+      _get(SiteAddress.resolve(site, url, episode: true), referer: site);
 
   Future<String> search(String keyword) =>
       _get('$site/search/video/${Uri.encodeComponent(keyword)}/');
 
   Future<List<int>> fetchImageBytes(String url) async {
+    url = SiteAddress.resolve(site, url);
     _log.d('fetchImageBytes: $url');
     try {
       final resp = await _dio.get(

@@ -13,6 +13,7 @@ import '../models/download_task.dart';
 import 'huangguo_api.dart';
 import 'stream_resolver.dart';
 import 'app_log.dart';
+import 'site_address.dart';
 
 const _log = AppLog('DownloadService');
 const _maxConcurrent = 2;
@@ -63,11 +64,18 @@ class DownloadService extends ChangeNotifier {
 
   String? _downloadRoot;
   bool _initialized = false;
+  Future<void>? _initializing;
 
   DownloadService(this._api) : _downloadDio = Dio() {
     _resolver = StreamResolver(_api);
     _downloadDio.options.connectTimeout = const Duration(seconds: 15);
     _downloadDio.options.receiveTimeout = const Duration(seconds: 30);
+  }
+
+  @override
+  void dispose() {
+    _downloadDio.close(force: true);
+    super.dispose();
   }
 
   String get downloadRoot => _downloadRoot ?? '';
@@ -130,7 +138,9 @@ class DownloadService extends ChangeNotifier {
     return _episodeDir(task.dramaName, task.dramaId, task.episodeName);
   }
 
-  Future<void> init() async {
+  Future<void> init() => _initializing ??= _initialize();
+
+  Future<void> _initialize() async {
     if (_initialized) return;
     final appDir = await getApplicationDocumentsDirectory();
     _downloadRoot = '${appDir.path}/huangguo_downloads';
@@ -183,7 +193,7 @@ class DownloadService extends ChangeNotifier {
       dramaId: drama.id,
       dramaName: drama.name,
       episodeName: episode.name,
-      episodeUrl: episode.url,
+      episodeUrl: SiteAddress.relative(episode.url, episode: true),
       ep: episode.ep,
     );
 
@@ -222,7 +232,7 @@ class DownloadService extends ChangeNotifier {
           dramaId: drama.id,
           dramaName: drama.name,
           episodeName: episode.name,
-          episodeUrl: episode.url,
+          episodeUrl: SiteAddress.relative(episode.url, episode: true),
           ep: episode.ep,
         ),
       );
@@ -433,9 +443,7 @@ class DownloadService extends ChangeNotifier {
 
       // 1. 解析 m3u8 地址
       String m3u8Url;
-      if (task.m3u8Url != null && task.m3u8Url!.isNotEmpty) {
-        m3u8Url = task.m3u8Url!;
-      } else {
+      {
         _log.d('_downloadTask: resolving m3u8, epUrl=${task.episodeUrl}');
         m3u8Url = await _resolver.resolveStream(
           Episode(name: task.episodeName, url: task.episodeUrl, ep: task.ep),
@@ -770,7 +778,9 @@ class DownloadService extends ChangeNotifier {
   Future<void> _persist() async {
     if (_downloadRoot == null) return;
     final metaFile = File('$_downloadRoot/$_metaFileName');
-    final json = _tasks.map((t) => t.toJson()).toList();
+    final json = _tasks
+        .map((t) => t.toJson(downloadRoot: _downloadRoot!))
+        .toList();
     await metaFile.writeAsString(jsonEncode(json));
   }
 
@@ -784,7 +794,10 @@ class DownloadService extends ChangeNotifier {
       final list = jsonDecode(content) as List<dynamic>;
       _tasks.clear();
       for (final item in list) {
-        final task = DownloadTask.fromJson(item as Map<String, dynamic>);
+        final task = DownloadTask.fromJson(
+          item as Map<String, dynamic>,
+          downloadRoot: _downloadRoot!,
+        );
         if (task.status == DownloadStatus.completed && task.filePath != null) {
           if (!await File(task.filePath!).exists()) {
             task.status = DownloadStatus.failed;

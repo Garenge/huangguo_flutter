@@ -5,17 +5,19 @@ import 'package:html/dom.dart' as dom;
 import '../models/drama.dart';
 import '../models/episode.dart';
 import 'app_log.dart';
+import 'site_address.dart';
 
 const _log = AppLog('HtmlParser');
 
 class HtmlParser {
-  String _site;
   static final _dramaIdPattern = RegExp(r'/(?:video|detail)/(\d+)(?:/|$)');
 
-  HtmlParser(this._site);
+  HtmlParser(String site) {
+    SiteAddress.register(site);
+  }
 
   void updateSite(String site) {
-    _site = site;
+    SiteAddress.register(site);
     _log.i('site updated: $site');
   }
 
@@ -23,16 +25,11 @@ class HtmlParser {
 
   String fix(String? url) {
     if (url == null || url.isEmpty) return '';
-    if (url.startsWith('//')) return 'https:$url';
-    if (url.startsWith('/')) return '$_site$url';
-    return url;
+    return SiteAddress.relative(url);
   }
 
   String imgSrc(String? url) {
     final fixed = fix(url);
-    if (fixed.startsWith('http') && fixed.contains('?')) {
-      return fixed.replaceAll(RegExp('\\?.*'), '');
-    }
     return fixed;
   }
 
@@ -174,7 +171,7 @@ class HtmlParser {
         episodes.add(
           Episode(
             name: name,
-            url: fix(href),
+            url: SiteAddress.relative(href, episode: true),
             ep: parsedEp.isNotEmpty ? '${int.parse(parsedEp)}' : '',
           ),
         );
@@ -188,7 +185,13 @@ class HtmlParser {
       if (playLink != null) {
         final href = playLink.attributes['href'];
         if (href != null) {
-          episodes.add(Episode(name: '\u7b2c1\u96c6', url: fix(href), ep: '1'));
+          episodes.add(
+            Episode(
+              name: '\u7b2c1\u96c6',
+              url: SiteAddress.relative(href, episode: true),
+              ep: '1',
+            ),
+          );
         }
       }
     }

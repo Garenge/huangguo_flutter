@@ -18,6 +18,8 @@ import 'services/playback_history_service.dart';
 import 'services/proxy_settings_service.dart';
 import 'services/app_log.dart';
 import 'services/site_endpoint_service.dart';
+import 'services/data_migration_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 const _log = AppLog('MainShell');
 
@@ -100,7 +102,6 @@ class _MainShellState extends State<MainShell> {
     _siteService.addListener(_onSiteChanged);
     _htmlParser = HtmlParser(_api.site);
     _downloadService = DownloadService(_api);
-    _downloadService.init();
     _historyService = PlaybackHistoryService();
 
     // 先应用已保存的代理，再允许首页发起请求。
@@ -109,11 +110,18 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _loadNetworkSettings() async {
+    final documents = await getApplicationDocumentsDirectory();
+    try {
+      await DataMigrationService(documents).run();
+    } catch (error, stack) {
+      _log.e('启动数据迁移校验失败，保留原数据继续启动', error, stack);
+    }
     await _proxyService.load();
     _siteService.updateProxy(_proxyService.settings);
     await _siteService.load();
     _api.updateSite(_siteService.selectedUrl);
     _htmlParser.updateSite(_siteService.selectedUrl);
+    await _downloadService.init();
     if (!mounted) return;
     _onProxyChanged();
     _proxyService.addListener(_onProxyChanged);

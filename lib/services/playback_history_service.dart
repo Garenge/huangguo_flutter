@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../models/playback_history.dart';
 import 'app_log.dart';
+import 'site_address.dart';
 
 const _log = AppLog('PlaybackHistoryService');
 
@@ -77,7 +78,7 @@ class PlaybackHistoryService {
       dramaName: dramaName,
       episodeName: episodeName,
       ep: ep,
-      url: url,
+      url: SiteAddress.relative(url, episode: true),
       positionMs: positionMs,
       savedAt: DateTime.now(),
       dramaId: dramaId,

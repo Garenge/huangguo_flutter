@@ -1,3 +1,6 @@
+import '../services/download_paths.dart';
+import '../services/site_address.dart';
+
 /// 下载任务状态
 enum DownloadStatus { pending, downloading, paused, completed, failed }
 
@@ -39,44 +42,58 @@ class DownloadTask {
     this.mp4Path,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  Map<String, dynamic> toJson() => {
+  Map<String, dynamic> toJson({String? downloadRoot}) => {
     'id': id,
     'dramaId': dramaId,
     'dramaName': dramaName,
     'episodeName': episodeName,
-    'episodeUrl': episodeUrl,
+    'episodeUrl': SiteAddress.relative(episodeUrl, episode: true),
     'ep': ep,
     'status': status.name,
     'progress': progress,
-    'filePath': filePath,
+    'filePath': downloadRoot == null
+        ? filePath
+        : DownloadPaths.relative(filePath, downloadRoot),
     'errorMessage': errorMessage,
     'createdAt': createdAt.toIso8601String(),
     'totalBytes': totalBytes,
     'downloadedBytes': downloadedBytes,
-    'm3u8Url': m3u8Url,
-    'mp4Path': mp4Path,
+    'm3u8Url': null,
+    'mp4Path': downloadRoot == null
+        ? mp4Path
+        : DownloadPaths.relative(mp4Path, downloadRoot),
   };
 
-  factory DownloadTask.fromJson(Map<String, dynamic> json) {
+  factory DownloadTask.fromJson(
+    Map<String, dynamic> json, {
+    String? downloadRoot,
+  }) {
     return DownloadTask(
       id: json['id'] as String,
       dramaId: json['dramaId'] as String,
       dramaName: json['dramaName'] as String,
       episodeName: json['episodeName'] as String,
-      episodeUrl: json['episodeUrl'] as String,
+      episodeUrl: SiteAddress.relative(
+        json['episodeUrl'] as String,
+        episode: true,
+      ),
       ep: json['ep'] as String,
       status: DownloadStatus.values.firstWhere(
         (s) => s.name == json['status'],
         orElse: () => DownloadStatus.pending,
       ),
       progress: (json['progress'] as num).toDouble(),
-      filePath: json['filePath'] as String?,
+      filePath: downloadRoot == null
+          ? json['filePath'] as String?
+          : DownloadPaths.resolve(json['filePath'] as String?, downloadRoot),
       errorMessage: json['errorMessage'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       totalBytes: json['totalBytes'] as int? ?? 0,
       downloadedBytes: json['downloadedBytes'] as int? ?? 0,
-      m3u8Url: json['m3u8Url'] as String?,
-      mp4Path: json['mp4Path'] as String?,
+      m3u8Url: null,
+      mp4Path: downloadRoot == null
+          ? json['mp4Path'] as String?
+          : DownloadPaths.resolve(json['mp4Path'] as String?, downloadRoot),
     );
   }
 

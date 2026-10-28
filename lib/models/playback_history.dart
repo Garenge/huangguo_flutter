@@ -1,3 +1,4 @@
+import '../services/site_address.dart';
 
 class PlaybackHistoryEntry {
   final String id;
@@ -31,7 +32,7 @@ class PlaybackHistoryEntry {
     'dramaName': dramaName,
     'episodeName': episodeName,
     'ep': ep,
-    'url': url,
+    'url': SiteAddress.relative(url, episode: true),
     'positionMs': positionMs,
     'savedAt': savedAt.toIso8601String(),
     if (dramaId != null) 'dramaId': dramaId,
@@ -43,7 +44,7 @@ class PlaybackHistoryEntry {
       dramaName: json['dramaName'] as String,
       episodeName: json['episodeName'] as String,
       ep: json['ep'] as String,
-      url: json['url'] as String,
+      url: SiteAddress.relative(json['url'] as String, episode: true),
       positionMs: json['positionMs'] as int,
       savedAt: DateTime.parse(json['savedAt'] as String),
       dramaId: json['dramaId'] as String?,
@@ -65,5 +66,6 @@ class PlaybackHistoryEntry {
   }
 
   @override
-  String toString() => 'PlaybackHistoryEntry(drama: $dramaName, ep: $ep, pos: ${formattedPosition})';
+  String toString() =>
+      'PlaybackHistoryEntry(drama: $dramaName, ep: $ep, pos: ${formattedPosition})';
 }
