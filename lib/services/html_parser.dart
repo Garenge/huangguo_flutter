@@ -298,6 +298,18 @@ class HtmlParser {
     }
 
     if (episodes.isEmpty) {
+      final videoData = _parseEmbeddedVideoData(html);
+      final id = videoData?['id']?.toString() ?? '';
+      final hasVideo =
+          (videoData?['videoSrc']?.toString().isNotEmpty ?? false) ||
+          (videoData?['epPlaySrcs'] is Map &&
+              (videoData!['epPlaySrcs'] as Map).isNotEmpty);
+      if (id.isNotEmpty && hasVideo) {
+        episodes.add(Episode(name: '第1集', url: '/video/$id/', ep: '1'));
+      }
+    }
+
+    if (episodes.isEmpty) {
       _log.w('parseEpisodes: no episodes found');
     } else {
       _log.i('parseEpisodes: ${episodes.length} episodes');
@@ -311,7 +323,7 @@ class HtmlParser {
       'meta[property="og:image"], meta[name="twitter:image"]',
     );
     final metaUrl = meta?.attributes['content'];
-    if (metaUrl != null && metaUrl.isNotEmpty) return imgSrc(metaUrl);
+    if (_isLoadableImageUrl(metaUrl)) return imgSrc(metaUrl);
 
     final image = document.querySelector(
       '.hg-web-detail__cover img, '
@@ -332,46 +344,59 @@ class HtmlParser {
       'src',
     ]) {
       final url = image.attributes[attribute];
-      if (url != null && url.isNotEmpty) return imgSrc(url);
+      if (_isLoadableImageUrl(url)) return imgSrc(url);
     }
     return '';
   }
 
+  bool _isLoadableImageUrl(String? url) {
+    if (url == null || url.trim().isEmpty) return false;
+    final scheme = Uri.tryParse(url.trim())?.scheme.toLowerCase();
+    return scheme != 'blob' && scheme != 'data';
+  }
+
   // ---------- Play URL Parsing ----------
 
-  String parsePlayUrl(String html, {String ep = '1'}) {
-    final scriptMatch = RegExp(
-      '<script\\s+id="videoInitialData"[^>]*>([\\s\\S]*?)</script>',
-    ).firstMatch(html);
+  Map<String, dynamic>? _parseEmbeddedVideoData(String html) {
+    final script = html_parser
+        .parse(html)
+        .querySelector('script#videoInitialData');
+    if (script == null) return null;
+    try {
+      final data = jsonDecode(script.text);
+      return data is Map<String, dynamic> ? data : null;
+    } catch (error, stack) {
+      _log.e(
+        'html_parser.dart _parseEmbeddedVideoData: JSON 解析失败',
+        error,
+        stack,
+      );
+      return null;
+    }
+  }
 
-    if (scriptMatch == null) {
+  String parsePlayUrl(String html, {String ep = '1'}) {
+    final data = _parseEmbeddedVideoData(html);
+    if (data == null) {
       _log.e('parsePlayUrl: videoInitialData script not found');
       throw Exception('videoInitialData script not found');
     }
 
-    final jsonStr = scriptMatch.group(1)!.trim();
-    _log.d('parsePlayUrl: videoInitialData found, ${jsonStr.length} chars');
-
     String? play;
-    try {
-      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      final epPlaySrcs = data['epPlaySrcs'];
-      if (epPlaySrcs is Map) {
-        play =
-            epPlaySrcs[ep]?.toString() ??
-            epPlaySrcs[int.tryParse(ep)]?.toString();
-        if (play != null && play.isNotEmpty) {
-          _log.d('parsePlayUrl: found epPlaySrcs[$ep]');
-        }
+    final epPlaySrcs = data['epPlaySrcs'];
+    if (epPlaySrcs is Map) {
+      play =
+          epPlaySrcs[ep]?.toString() ??
+          epPlaySrcs[int.tryParse(ep)]?.toString();
+      if (play != null && play.isNotEmpty) {
+        _log.d('parsePlayUrl: found epPlaySrcs[$ep]');
       }
-      if (play == null || play.isEmpty) {
-        play = data['videoSrc']?.toString();
-        if (play != null && play.isNotEmpty) {
-          _log.d('parsePlayUrl: found videoSrc');
-        }
+    }
+    if (play == null || play.isEmpty) {
+      play = data['videoSrc']?.toString();
+      if (play != null && play.isNotEmpty) {
+        _log.d('parsePlayUrl: found videoSrc');
       }
-    } catch (e) {
-      _log.w('parsePlayUrl: invalid videoInitialData JSON: $e');
     }
 
     if (play == null || play.isEmpty) {

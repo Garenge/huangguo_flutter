@@ -99,9 +99,11 @@ class _DetailPageState extends State<DetailPage> {
       final html = await widget.api.fetchDetail(widget.drama.id);
       final episodes = widget.htmlParser.parseEpisodes(html);
       final coverUrl = widget.htmlParser.parseDetailCover(html);
-      final image = await _loadImage(
-        coverUrl.isNotEmpty ? coverUrl : widget.drama.pic,
-      );
+      final image =
+          await _loadImage(coverUrl) ??
+          (coverUrl == widget.drama.pic
+              ? null
+              : await _loadImage(widget.drama.pic));
       setState(() {
         _episodes = episodes;
         _decryptedImage = image;
@@ -372,15 +374,6 @@ class _DetailPageState extends State<DetailPage> {
     if (_decryptedImage != null) {
       return Image.memory(
         _decryptedImage!,
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _placeholder(width, height),
-      );
-    }
-    if (widget.drama.pic.isNotEmpty) {
-      return Image.network(
-        widget.drama.pic,
         width: width,
         height: height,
         fit: BoxFit.cover,

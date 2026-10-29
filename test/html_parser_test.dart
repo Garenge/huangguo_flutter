@@ -168,6 +168,34 @@ void main() {
     expect(episodes.single.url, '/play/9936/1/');
   });
 
+  test('creates a single episode for embedded single-video detail pages', () {
+    const html = '''
+      <script id="videoInitialData" type="application/json">
+        {"id":"10732","videoSrc":"https://cdn.example/video.m3u8?token=abc"}
+      </script>
+    ''';
+
+    final episodes = parser.parseEpisodes(html);
+
+    expect(episodes, hasLength(1));
+    expect(episodes.single.name, '第1集');
+    expect(episodes.single.ep, '1');
+    expect(episodes.single.url, '/video/10732/');
+  });
+
+  test('parses HLS URL from the single-video embedded data', () {
+    const html = r'''
+      <script id="videoInitialData" type="application/json">
+        {"id":"10732","epPlaySrcs":{"1":"https://cdn.example/video.m3u8?token=abc\u0026via=hgdj"}}
+      </script>
+    ''';
+
+    expect(
+      parser.parsePlayUrl(html),
+      'https://cdn.example/video.m3u8?token=abc&via=hgdj',
+    );
+  });
+
   test('parses cover from video detail pages', () {
     const html = '''
       <div class="hg-web-detail">
@@ -189,5 +217,19 @@ void main() {
     ''';
 
     expect(parser.parseDetailCover(html), '/detail-cover.jpg');
+  });
+
+  test('ignores browser-only blob cover URLs', () {
+    const html = '''
+      <section class="hg-web-play__introcard">
+        <div class="hg-web-play__poster">
+          <img src="blob:https://huangguoai.com/id"
+               _type="data-src"
+               _default_src="data:image/gif;base64,placeholder">
+        </div>
+      </section>
+    ''';
+
+    expect(parser.parseDetailCover(html), '');
   });
 }

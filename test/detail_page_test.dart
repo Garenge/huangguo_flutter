@@ -11,6 +11,8 @@ import 'package:huangguo_flutter/services/image_decryptor.dart';
 
 class _TestApi extends HuangguoApi {
   int detailFetchCount = 0;
+  final List<String> imageRequests = [];
+  final Set<String> failedImageUrls = {};
 
   @override
   Future<String> fetchDetail(String dramaId) async {
@@ -27,7 +29,11 @@ class _TestApi extends HuangguoApi {
   }
 
   @override
-  Future<List<int>> fetchImageBytes(String url) async => [];
+  Future<List<int>> fetchImageBytes(String url) async {
+    imageRequests.add(url);
+    if (failedImageUrls.contains(url)) throw Exception('image request failed');
+    return [];
+  }
 }
 
 class _TestDownloadService extends DownloadService {
@@ -144,5 +150,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+  });
+
+  testWidgets('falls back to the home card cover when detail cover fails', (
+    tester,
+  ) async {
+    final api = _TestApi()..failedImageUrls.add('/detail-cover.jpg');
+    final service = _TestDownloadService(api);
+    final drama = const Drama(
+      id: '1',
+      name: '测试剧',
+      pic: '/home-cover.jpg',
+      remark: '',
+    );
+
+    addTearDown(() {
+      service.dispose();
+      api.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DetailPage(
+          drama: drama,
+          api: api,
+          htmlParser: HtmlParser(api.site),
+          imageDecryptor: ImageDecryptor(),
+          downloadService: service,
+          onPlayEpisode: (_, _) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.imageRequests, ['/detail-cover.jpg', '/home-cover.jpg']);
   });
 }
