@@ -139,7 +139,10 @@ class HuangguoApi extends ChangeNotifier {
       try {
         final resp = await _dio.get(
           url,
-          options: Options(headers: _headers(referer: referer)),
+          options: Options(
+            headers: _headers(referer: referer),
+            responseType: ResponseType.plain,
+          ),
         );
         final html = resp.data as String;
         _log.i('GET ${resp.statusCode} ${html.length} chars <- $url');
@@ -171,6 +174,22 @@ class HuangguoApi extends ChangeNotifier {
   }
 
   Future<String> fetchDetail(String dramaId) => _get('$site/video/$dramaId/');
+
+  Future<String> fetchChannelPage(String tabId, String channelTab, int page) {
+    if (channelTab != 'hot' && channelTab != 'original') {
+      throw ArgumentError.value(channelTab, 'channelTab', '频道不支持分页');
+    }
+    final category = tabId.replaceAll(RegExp(r'^/+|/+$'), '');
+    final uri = Uri.parse('$site/api/videos/category/$category').replace(
+      queryParameters: {
+        'sort': 'hot_window',
+        if (channelTab == 'original') 'is_original': '1',
+        'page': '$page',
+        'size': '21',
+      },
+    );
+    return _get(uri.toString(), referer: '$site/$category/');
+  }
 
   Future<String> fetchPlayPage(String url) =>
       _get(SiteAddress.resolve(site, url, episode: true), referer: site);

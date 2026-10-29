@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/drama.dart';
+import '../models/channel_page.dart';
 import '../models/episode.dart';
 import '../models/source_config.dart';
 import '../services/source_loader.dart';
@@ -16,11 +17,14 @@ const _log = AppLog('HomePage');
 
 class _ListCacheEntry {
   final String html;
+  final ChannelPage? channelPage;
   List<TabItem>? channelTabs;
   final Map<String, List<Drama>> _itemsByChannel = {};
   final Set<String> _emptyChannels = {};
 
-  _ListCacheEntry({required this.html});
+  _ListCacheEntry({required this.html}) : channelPage = null;
+
+  _ListCacheEntry.channel(this.channelPage, this.channelTabs) : html = '';
 
   List<Drama> itemsFor({
     required String tab,
@@ -28,6 +32,7 @@ class _ListCacheEntry {
     required HtmlParser parser,
     required List<TabItem> channelTabs,
   }) {
+    if (channelPage != null) return channelPage!.items;
     final key = '$tab|$channelTab';
     if (_emptyChannels.contains(key)) return const <Drama>[];
     return _itemsByChannel.putIfAbsent(key, () {
@@ -92,6 +97,7 @@ class _HomePageState extends State<HomePage> {
   int _loadToken = 0;
   bool _isLoadingSource = true;
   bool _isLoading = false;
+  bool _hasNextPage = false;
   String? _errorMessage;
   String? _statusMessage;
 
@@ -184,7 +190,7 @@ class _HomePageState extends State<HomePage> {
     final channelTab = _selectedChannelTab;
     final page = _currentPage;
     final token = ++_loadToken;
-    final cacheKey = _cacheKey(tab, page);
+    final cacheKey = _cacheKey(tab, channelTab, page);
     final cached = forceFetch ? null : _listCache[cacheKey];
     _log.i('_loadList: tab=$tab, channel=$channelTab, page=$page');
     setState(() {
@@ -196,12 +202,8 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      var entry = cached;
-      if (entry == null) {
-        final html = await widget.api.fetchCategory(tab, page);
-        entry = _ListCacheEntry(html: html);
-      }
-      final loadedEntry = entry;
+      final loadedEntry =
+          cached ?? await _fetchListEntry(tab, channelTab, page);
       final channelTabs = loadedEntry.channelTabs ??= _htmlParser
           .parseChannelTabs(loadedEntry.html);
       final items = loadedEntry.itemsFor(
@@ -223,6 +225,7 @@ class _HomePageState extends State<HomePage> {
         _channelTabs = channelTabs;
         _dramas = items;
         _isLoading = false;
+        _hasNextPage = loadedEntry.channelPage?.hasNextPage ?? items.isNotEmpty;
         _statusMessage = '解析到 ${items.length} 个条目';
       });
     } catch (e, stack) {
@@ -234,6 +237,21 @@ class _HomePageState extends State<HomePage> {
         _dramas = [];
       });
     }
+  }
+
+  Future<_ListCacheEntry> _fetchListEntry(
+    String tab,
+    String channelTab,
+    int page,
+  ) async {
+    if (page > 1 &&
+        _channelTabs.isNotEmpty &&
+        (channelTab == 'hot' || channelTab == 'original')) {
+      final tabs = List<TabItem>.of(_channelTabs);
+      final response = await widget.api.fetchChannelPage(tab, channelTab, page);
+      return _ListCacheEntry.channel(ChannelPage.fromResponse(response), tabs);
+    }
+    return _ListCacheEntry(html: await widget.api.fetchCategory(tab, page));
   }
 
   void _onTabChanged(String tabId) {
@@ -251,6 +269,7 @@ class _HomePageState extends State<HomePage> {
     _log.i('_onChannelTabChanged: $tabId');
     setState(() {
       _selectedChannelTab = tabId;
+      _currentPage = 1;
     });
     _loadList(forceFetch: false);
   }
@@ -265,7 +284,10 @@ class _HomePageState extends State<HomePage> {
     _loadList(forceFetch: false);
   }
 
-  String _cacheKey(String tab, int page) => '$tab|$page';
+  String _cacheKey(String tab, String channelTab, int page) =>
+      page > 1 && (channelTab == 'hot' || channelTab == 'original')
+      ? '$tab|$channelTab|$page'
+      : '$tab|$page';
 
   void _onDramaTap(Drama drama) {
     _log.i('_onDramaTap: ${drama.name} (id=${drama.id})');
@@ -517,7 +539,10 @@ class _HomePageState extends State<HomePage> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right_rounded),
-            onPressed: !_isLoading && _dramas.isNotEmpty
+            onPressed:
+                !_isLoading &&
+                    _hasNextPage &&
+                    (_channelTabs.isEmpty || _selectedChannelTab != 'random')
                 ? () => _onPageChanged(1)
                 : null,
             color: Colors.white70,

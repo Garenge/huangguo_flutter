@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../models/drama.dart';
 import '../models/episode.dart';
@@ -123,10 +124,28 @@ class _DetailPageState extends State<DetailPage> {
     if (imageUrl.isEmpty) return null;
     try {
       final bytes = await widget.api.fetchImageBytes(imageUrl);
-      return widget.imageDecryptor.decrypt(Uint8List.fromList(bytes));
+      final image = widget.imageDecryptor.decrypt(Uint8List.fromList(bytes));
+      if (!await _canDecodeImage(image)) {
+        _log.w('_loadImage: response is not a decodable image: $imageUrl');
+        return null;
+      }
+      return image;
     } catch (e, stack) {
       _log.e('_loadImage: failed', e, stack);
       return null;
+    }
+  }
+
+  Future<bool> _canDecodeImage(Uint8List bytes) async {
+    if (bytes.isEmpty) return false;
+    ui.Codec? codec;
+    try {
+      codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      frame.image.dispose();
+      return true;
+    } finally {
+      codec?.dispose();
     }
   }
 
