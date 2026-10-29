@@ -93,8 +93,11 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
+    return SafeArea(
+      top: true,
+      bottom: false,
+      child: Column(
+        children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: TextField(
@@ -140,8 +143,9 @@ class _SearchPageState extends State<SearchPage> {
               ],
             ),
           ),
-        Expanded(child: _buildResults()),
-      ],
+          Expanded(child: _buildResults()),
+        ],
+      ),
     );
   }
 

@@ -135,11 +135,14 @@ class _ManualParsePageState extends State<ManualParsePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return SafeArea(
+      top: true,
+      bottom: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           _sectionTitle('播放页 URL'),
           const SizedBox(height: 8),
           TextField(
@@ -279,7 +282,8 @@ class _ManualParsePageState extends State<ManualParsePage> {
               ),
             ),
           ],
-        ],
+          ],
+        ),
       ),
     );
   }
