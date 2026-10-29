@@ -15,6 +15,7 @@ const _log = AppLog('DetailPage');
 
 class DetailPage extends StatefulWidget {
   final Drama drama;
+  final Uint8List? fallbackImage;
   final HuangguoApi api;
   final HtmlParser htmlParser;
   final ImageDecryptor imageDecryptor;
@@ -24,6 +25,7 @@ class DetailPage extends StatefulWidget {
   const DetailPage({
     super.key,
     required this.drama,
+    this.fallbackImage,
     required this.api,
     required this.htmlParser,
     required this.imageDecryptor,
@@ -104,7 +106,8 @@ class _DetailPageState extends State<DetailPage> {
           await _loadImage(coverUrl) ??
           (coverUrl == widget.drama.pic
               ? null
-              : await _loadImage(widget.drama.pic));
+              : await _loadImage(widget.drama.pic)) ??
+          widget.fallbackImage;
       setState(() {
         _episodes = episodes;
         _decryptedImage = image;

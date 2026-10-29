@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'models/drama.dart';
 import 'models/episode.dart';
@@ -187,11 +188,16 @@ class _MainShellState extends State<MainShell> {
   }
 
   /// Push detail page within the given tab navigator
-  void _openDetail(Drama drama, GlobalKey<NavigatorState> navKey) {
+  void _openDetail(
+    Drama drama,
+    GlobalKey<NavigatorState> navKey, {
+    Uint8List? fallbackImage,
+  }) {
     navKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => DetailPage(
           drama: drama,
+          fallbackImage: fallbackImage,
           api: _api,
           htmlParser: _htmlParser,
           imageDecryptor: _imageDecryptor,
@@ -264,6 +270,8 @@ class _MainShellState extends State<MainShell> {
           sourceLoader: _sourceLoader,
           onParserReady: (parser) => _htmlParser = parser,
           onOpenDetail: (drama) => _openDetail(drama, _homeNavKey),
+          onOpenDetailWithImage: (drama, image) =>
+              _openDetail(drama, _homeNavKey, fallbackImage: image),
           onPlayEpisode: (ep, eps, dramaName) =>
               _playEpisode(ep, eps, dramaName: dramaName),
           downloadService: _downloadService,

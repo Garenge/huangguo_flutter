@@ -61,6 +61,8 @@ class HomePage extends StatefulWidget {
   final DownloadService downloadService;
   final void Function(HtmlParser parser)? onParserReady;
   final void Function(Drama drama) onOpenDetail;
+  final void Function(Drama drama, Uint8List? fallbackImage)?
+  onOpenDetailWithImage;
   final void Function(
     Episode episode,
     List<Episode> allEpisodes,
@@ -76,6 +78,7 @@ class HomePage extends StatefulWidget {
     required this.downloadService,
     this.onParserReady,
     required this.onOpenDetail,
+    this.onOpenDetailWithImage,
     required this.onPlayEpisode,
   });
 
@@ -499,7 +502,14 @@ class _HomePageState extends State<HomePage> {
             builder: (_, snapshot) {
               return DramaCard(
                 drama: drama,
-                onTap: () => _onDramaTap(drama),
+                onTap: () {
+                  final openWithImage = widget.onOpenDetailWithImage;
+                  if (openWithImage != null) {
+                    openWithImage(drama, snapshot.data);
+                  } else {
+                    _onDramaTap(drama);
+                  }
+                },
                 decryptedImage: snapshot.data,
               );
             },
