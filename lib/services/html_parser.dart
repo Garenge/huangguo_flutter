@@ -45,10 +45,16 @@ class HtmlParser {
     final tabs = <TabItem>[];
     final seen = <String>{};
 
-    for (final button in document.querySelectorAll(
-      '.hg-channel-tabs__item[data-tab]',
-    )) {
-      final id = button.attributes['data-tab']?.trim() ?? '';
+    final candidates = document.querySelectorAll(
+      '[data-tab], [data-channel-tab], .hg-channel-tabs__item',
+    );
+    for (final button in candidates) {
+      final id =
+          (button.attributes['data-tab'] ??
+                  button.attributes['data-channel-tab'] ??
+                  button.attributes['data-id'])
+              ?.trim() ??
+          '';
       final name = stripTags(button.text);
       if (id.isEmpty || name.isEmpty || !seen.add(id)) continue;
       tabs.add(TabItem(name: name, id: id));
@@ -66,10 +72,26 @@ class HtmlParser {
     final document = html_parser.parse(html);
     final grids = channelTabId == null
         ? document.querySelectorAll('.hg-card-grid')
-        : document.querySelectorAll(
-            '.hg-card-grid[data-channel-panel="$channelTabId"]',
-          );
-    if (grids.isEmpty) {
+        : _channelGrids(document, channelTabId);
+    final gridsToProcess = channelTabId != null
+        ? grids
+        : (allGrids
+              ? grids
+              : (grids.isEmpty ? <dom.Element>[] : [grids.first]));
+    final cards = <dom.Element>[
+      for (final grid in gridsToProcess)
+        ...grid.querySelectorAll('.hg-drama-card'),
+    ];
+    if (cards.isEmpty && channelTabId != null) {
+      for (final template in _channelTemplates(document, channelTabId)) {
+        cards.addAll(
+          html_parser
+              .parse(template.innerHtml)
+              .querySelectorAll('.hg-drama-card'),
+        );
+      }
+    }
+    if (cards.isEmpty) {
       _log.w(
         'parseCardList: no .hg-card-grid found'
         '${channelTabId == null ? '' : ' for channel=$channelTabId'}',
@@ -80,22 +102,69 @@ class HtmlParser {
     final seen = <String>{};
     final list = <Drama>[];
 
-    final gridsToProcess = channelTabId != null
-        ? grids
-        : (allGrids ? grids : [grids.first]);
-    for (final grid in gridsToProcess) {
-      final cards = grid.querySelectorAll('.hg-drama-card');
-      _log.d('parseCardList: found ${cards.length} cards in grid');
-      for (final card in cards) {
-        final drama = _parseCardBlock(card);
-        if (drama != null && seen.add(drama.id)) {
-          list.add(drama);
-        }
+    for (final card in cards) {
+      final drama = _parseCardBlock(card);
+      if (drama != null && seen.add(drama.id)) {
+        list.add(drama);
       }
     }
 
     _log.i('parseCardList: ${list.length} unique dramas');
     return list;
+  }
+
+  bool hasChannelPanel(String html, String channelTabId) {
+    final document = html_parser.parse(html);
+    return _channelGrids(document, channelTabId).isNotEmpty ||
+        _channelTemplates(document, channelTabId).isNotEmpty;
+  }
+
+  List<dom.Element> _channelTemplates(
+    dom.Document document,
+    String channelTabId,
+  ) {
+    return document
+        .querySelectorAll('template[data-panel-cards]')
+        .where(
+          (template) => template.attributes['data-panel-cards'] == channelTabId,
+        )
+        .toList();
+  }
+
+  List<dom.Element> _channelGrids(dom.Document document, String channelTabId) {
+    final escapedId = RegExp.escape(channelTabId);
+    final exact = document.querySelectorAll(
+      '[data-channel-panel="$channelTabId"], '
+      '[data-tab-panel="$channelTabId"], '
+      '[data-channel="$channelTabId"], '
+      '.hg-card-grid[data-channel-panel="$channelTabId"], '
+      '#$escapedId',
+    );
+    final grids = exact.where((element) {
+      return element.classes.contains('hg-card-grid') ||
+          element.querySelector('.hg-card-grid') != null;
+    }).toList();
+    if (grids.isNotEmpty) {
+      return grids
+          .expand(
+            (element) => element.classes.contains('hg-card-grid')
+                ? [element]
+                : element.querySelectorAll('.hg-card-grid'),
+          )
+          .toList();
+    }
+
+    // Some revisions put the channel id in a class instead of a data
+    // attribute. Restrict the fallback to card grids to avoid matching the
+    // navigation button itself.
+    return document.querySelectorAll('.hg-card-grid').where((grid) {
+      final marker = [
+        grid.attributes['id'] ?? '',
+        grid.attributes['class'] ?? '',
+        grid.attributes['data-section'] ?? '',
+      ].join(' ');
+      return RegExp('(^|[-_ ])$escapedId([-_ ]|\$)').hasMatch(marker);
+    }).toList();
   }
 
   Drama? _parseCardBlock(dom.Element card) {

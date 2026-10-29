@@ -63,6 +63,58 @@ void main() {
     expect(hotItems.single.name, '热门条目');
   });
 
+  test('parses channel panels identified by tab panel and nested section', () {
+    const html = '''
+      <button data-channel-tab="hot">当前热播</button>
+      <section data-tab-panel="hot">
+        <div class="hg-card-grid">
+          <a class="hg-drama-card" href="/video/2002/">
+            <h3 class="hg-drama-card__title">热播条目</h3>
+          </a>
+        </div>
+      </section>
+      <div class="hg-card-grid" id="original">
+        <a class="hg-drama-card" href="/video/2003/">
+          <h3 class="hg-drama-card__title">原创条目</h3>
+        </a>
+      </div>
+    ''';
+
+    expect(parser.parseChannelTabs(html).single.id, 'hot');
+    expect(
+      parser.parseCardList(html, false, channelTabId: 'hot').single.name,
+      '热播条目',
+    );
+    expect(
+      parser.parseCardList(html, false, channelTabId: 'original').single.name,
+      '原创条目',
+    );
+  });
+
+  test('parses lazy channel cards stored in an HTML template', () {
+    const html = '''
+      <div class="hg-card-grid is-active" data-channel-panel="latest">
+        <a class="hg-drama-card" href="/video/1001/">
+          <h3 class="hg-drama-card__title">最新条目</h3>
+        </a>
+      </div>
+      <div class="hg-card-grid" data-channel-panel="hot" hidden></div>
+      <template data-panel-cards="hot">
+        <div class="hg-drama-card">
+          <a href="/video/2833/">
+            <h3 class="hg-drama-card__title">热播条目</h3>
+          </a>
+        </div>
+      </template>
+    ''';
+
+    final hotItems = parser.parseCardList(html, false, channelTabId: 'hot');
+
+    expect(hotItems, hasLength(1));
+    expect(hotItems.single.id, '2833');
+    expect(hotItems.single.name, '热播条目');
+  });
+
   test('keeps the first-grid fallback when no channel tab is specified', () {
     const html = '''
       <div class="hg-card-grid">

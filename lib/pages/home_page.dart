@@ -14,6 +14,41 @@ import '../widgets/loading_indicator.dart';
 
 const _log = AppLog('HomePage');
 
+class _ListCacheEntry {
+  final String html;
+  List<TabItem>? channelTabs;
+  final Map<String, List<Drama>> _itemsByChannel = {};
+  final Set<String> _emptyChannels = {};
+
+  _ListCacheEntry({required this.html});
+
+  List<Drama> itemsFor({
+    required String tab,
+    required String channelTab,
+    required HtmlParser parser,
+    required List<TabItem> channelTabs,
+  }) {
+    final key = '$tab|$channelTab';
+    if (_emptyChannels.contains(key)) return const <Drama>[];
+    return _itemsByChannel.putIfAbsent(key, () {
+      if (tab.contains('rank')) return parser.parseRankList(html);
+      final explicitPanel = parser.hasChannelPanel(html, channelTab);
+      if (!explicitPanel && channelTabs.isNotEmpty && channelTabs.length > 1) {
+        _emptyChannels.add(key);
+        return const <Drama>[];
+      }
+      final activeChannel = channelTabs.any((item) => item.id == channelTab)
+          ? channelTab
+          : null;
+      return parser.parseCardList(
+        html,
+        tab == 'home',
+        channelTabId: activeChannel,
+      );
+    });
+  }
+}
+
 class HomePage extends StatefulWidget {
   final Future<void>? networkReady;
   final HuangguoApi api;
@@ -53,9 +88,8 @@ class _HomePageState extends State<HomePage> {
   String _selectedTab = 'home';
   String _selectedChannelTab = 'latest';
   int _currentPage = 1;
-  String? _loadedHtml;
-  String? _loadedHtmlTab;
-  int? _loadedHtmlPage;
+  final Map<String, _ListCacheEntry> _listCache = {};
+  int _loadToken = 0;
   bool _isLoadingSource = true;
   bool _isLoading = false;
   String? _errorMessage;
@@ -126,7 +160,7 @@ class _HomePageState extends State<HomePage> {
     if (_sourceConfig == null) {
       await _loadSource();
     } else {
-      await _loadList();
+      await _loadList(forceFetch: true);
     }
   }
 
@@ -146,46 +180,44 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadList({bool forceFetch = true}) async {
-    _log.i('_loadList: tab=$_selectedTab, page=$_currentPage');
+    final tab = _selectedTab;
+    final channelTab = _selectedChannelTab;
+    final page = _currentPage;
+    final token = ++_loadToken;
+    final cacheKey = _cacheKey(tab, page);
+    final cached = forceFetch ? null : _listCache[cacheKey];
+    _log.i('_loadList: tab=$tab, channel=$channelTab, page=$page');
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      if (cached == null) {
+        _dramas = [];
+      }
     });
 
     try {
-      final canReuseHtml =
-          !forceFetch &&
-          _loadedHtml != null &&
-          _loadedHtmlTab == _selectedTab &&
-          _loadedHtmlPage == _currentPage;
-      final html = canReuseHtml
-          ? _loadedHtml!
-          : await widget.api.fetchCategory(_selectedTab, _currentPage);
-      if (!canReuseHtml) {
-        _loadedHtml = html;
-        _loadedHtmlTab = _selectedTab;
-        _loadedHtmlPage = _currentPage;
+      var entry = cached;
+      if (entry == null) {
+        final html = await widget.api.fetchCategory(tab, page);
+        entry = _ListCacheEntry(html: html);
       }
-      final isRank = _selectedTab.contains('rank');
-      final isHome = _selectedTab == 'home';
-      final channelTabs = _htmlParser.parseChannelTabs(html);
-
-      List<Drama> items;
-      if (isRank) {
-        items = _htmlParser.parseRankList(html);
-      } else {
-        final activeChannelTab =
-            channelTabs.any((tab) => tab.id == _selectedChannelTab)
-            ? _selectedChannelTab
-            : (channelTabs.isNotEmpty ? channelTabs.first.id : null);
-        items = _htmlParser.parseCardList(
-          html,
-          isHome,
-          channelTabId: activeChannelTab,
-        );
+      final loadedEntry = entry;
+      final channelTabs = loadedEntry.channelTabs ??= _htmlParser
+          .parseChannelTabs(loadedEntry.html);
+      final items = loadedEntry.itemsFor(
+        tab: tab,
+        channelTab: channelTab,
+        parser: _htmlParser,
+        channelTabs: channelTabs,
+      );
+      _listCache[cacheKey] = loadedEntry;
+      if (!mounted ||
+          token != _loadToken ||
+          tab != _selectedTab ||
+          page != _currentPage ||
+          channelTab != _selectedChannelTab) {
+        return;
       }
-
-      if (!mounted) return;
       _log.i('_loadList: parsed ${items.length} items');
       setState(() {
         _channelTabs = channelTabs;
@@ -195,10 +227,11 @@ class _HomePageState extends State<HomePage> {
       });
     } catch (e, stack) {
       _log.e('_loadList: failed', e, stack);
-      if (!mounted) return;
+      if (!mounted || token != _loadToken) return;
       setState(() {
         _isLoading = false;
         _errorMessage = '列表加载失败：$e';
+        _dramas = [];
       });
     }
   }
@@ -211,7 +244,7 @@ class _HomePageState extends State<HomePage> {
       _channelTabs = [];
       _currentPage = 1;
     });
-    _loadList();
+    _loadList(forceFetch: false);
   }
 
   void _onChannelTabChanged(String tabId) {
@@ -223,15 +256,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onPageChanged(int delta) {
-    if (_isLoading) return;
     final newPage = _currentPage + delta;
     if (newPage < 1) return;
     _log.i('_onPageChanged: $_currentPage -> $newPage');
     setState(() {
       _currentPage = newPage;
     });
-    _loadList();
+    _loadList(forceFetch: false);
   }
+
+  String _cacheKey(String tab, int page) => '$tab|$page';
 
   void _onDramaTap(Drama drama) {
     _log.i('_onDramaTap: ${drama.name} (id=${drama.id})');
