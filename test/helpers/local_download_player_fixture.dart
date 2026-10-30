@@ -11,6 +11,9 @@ import 'package:huangguo_flutter/widgets/local_download_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'local_video_platform.dart';
+import 'package:huangguo_flutter/widgets/playback_scope.dart';
+import 'package:huangguo_flutter/services/playback_settings_service.dart';
+import 'package:huangguo_flutter/services/playback_coordinator.dart';
 
 Future<void> mountLocalDownloads(WidgetTester tester) async {
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -34,10 +37,17 @@ Future<void> mountLocalDownloads(WidgetTester tester) async {
     );
     await tester.runAsync(() => directory.delete(recursive: true));
   });
+  final settings = PlaybackSettingsService(directory: directory);
+  await tester.runAsync(settings.load);
   final tasks = List.generate(40, (index) => _localTask(index, path));
   await tester.pumpWidget(
     MaterialApp(
-      home: LocalDownloadPlayer(tasks: tasks, initialTask: tasks.first),
+      home: PlaybackScope(
+        settings: settings,
+        coordinator: PlaybackCoordinator(),
+        onlineVisible: false,
+        child: LocalDownloadPlayer(tasks: tasks, initialTask: tasks.first),
+      ),
     ),
   );
   await pumpLocalPlayer(tester);
@@ -49,7 +59,9 @@ Future<void> pumpLocalPlayer(WidgetTester tester) async {
   // Playing controllers update every 100 ms, so frames never fully settle.
   for (var frame = 0; frame < 10; frame++) {
     await tester.pump(const Duration(milliseconds: 50));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
   }
+  await tester.pump();
 }
 
 DownloadTask _localTask(int index, String path) => DownloadTask(

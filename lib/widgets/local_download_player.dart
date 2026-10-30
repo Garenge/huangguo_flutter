@@ -2,6 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import '../services/playback_session.dart';
+import '../services/playback_settings_service.dart';
+import '../services/playback_coordinator.dart';
+import 'playback_scope.dart';
 
 import '../models/download_task.dart';
 import '../services/local_media_server.dart';
@@ -25,6 +29,8 @@ class LocalDownloadPlayer extends StatefulWidget {
 class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   final LocalMediaServer _server = LocalMediaServer();
   VideoPlayerController? _controller;
+  PlaybackSession? _session;
+  PlaybackSettingsService? _ownedSettings;
   late List<DownloadTask> _tasks;
   late DownloadTask _currentTask;
   bool _loading = true;
@@ -44,11 +50,30 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
       (task) => task.id == widget.initialTask.id,
       orElse: () => _tasks.first,
     );
-    _loadCurrentTask();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = PlaybackScope.maybeOf(context);
+    if (_session == null) {
+      final settings =
+          scope?.settings ?? (_ownedSettings = PlaybackSettingsService());
+      _session = PlaybackSession(
+        settings,
+        scope?.coordinator ?? PlaybackCoordinator(),
+      );
+      settings.load();
+      _session!.setVisible(scope?.localVisible ?? true);
+      _loadCurrentTask();
+    }
+    _session!.setVisible(scope?.localVisible ?? true);
   }
 
   @override
   void dispose() {
+    _session?.dispose();
+    _ownedSettings?.dispose();
     _loadGeneration++;
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
@@ -90,6 +115,8 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
       _error = null;
       _completionHandled = false;
     });
+    _session!.controller = null;
+    await _session!.begin();
     await previous?.dispose();
     _server.stop();
 
@@ -101,12 +128,17 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
         await candidate.dispose();
         return;
       }
+      await _session!.attach(candidate);
+      if (!mounted || generation != _loadGeneration) {
+        await candidate.dispose();
+        return;
+      }
       setState(() {
         _controller = candidate;
         _loading = false;
       });
       candidate.addListener(_onControllerChanged);
-      await candidate.play();
+      if (mounted && generation == _loadGeneration) await _session!.play();
     } catch (error) {
       await candidate?.dispose();
       if (!mounted || generation != _loadGeneration) return;
@@ -142,7 +174,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     }
     if (value.isBuffering || _completionHandled) return;
     _completionHandled = true;
-    if (_autoPlay) _playNext();
+    if (_autoPlay && _session!.canPlay) _playNext();
   }
 
   void _playNext() {
@@ -180,6 +212,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
             height: 240,
             child: AppVideoPlayer(
               controller: _controller,
+              session: _session,
               title: _currentTask.episodeName,
               loading: _loading,
               error: _error,

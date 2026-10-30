@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../services/playback_session.dart';
 import 'package:video_player/video_player.dart';
 
 import '../services/app_log.dart';
@@ -9,6 +11,7 @@ import 'playback_controls.dart';
 class VideoPlayerSurface extends StatefulWidget {
   final VideoPlayerController? controller;
   final String title;
+  final PlaybackSession? session;
   final bool loading;
   final String? error;
   final bool fullscreen;
@@ -23,6 +26,7 @@ class VideoPlayerSurface extends StatefulWidget {
     super.key,
     required this.controller,
     required this.title,
+    this.session,
     required this.onToggleFullscreen,
     this.loading = false,
     this.error,
@@ -123,7 +127,10 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
     final playing = _controller?.value.isPlaying ?? false;
     if (playing != _wasPlaying) {
       _wasPlaying = playing;
-      if (!playing && !_seeking) _visible = true;
+      if (!playing && !_seeking) {
+        _restoreSpeed();
+        _visible = true;
+      }
       _scheduleHide();
     }
     setState(() {});
@@ -157,10 +164,20 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
         if (controller.value.position >= controller.value.duration) {
           await controller.seekTo(Duration.zero);
         }
-        await controller.play();
+        await _play(controller, explicit: true);
       }
     });
     _scheduleHide();
+  }
+
+  Future<void> _play(
+    VideoPlayerController controller, {
+    bool explicit = false,
+  }) => widget.session?.play(explicit: explicit) ?? controller.play();
+
+  Future<void> _selectSpeed(double speed) async {
+    await _run((c) => c.setPlaybackSpeed(speed));
+    await widget.session?.settings.setSpeed(speed);
   }
 
   void _startSeek() {
@@ -198,7 +215,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
           _foreground &&
           generation == _seekGeneration &&
           resume) {
-        await c.play();
+        await _play(c);
       }
     });
     if (!mounted ||
@@ -222,16 +239,39 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
       _seeking = false;
       _preview = null;
     });
-    if (resume && widget.active && _foreground) _run((c) => c.play());
+    if (resume && widget.active && _foreground) _run((c) => _play(c));
     _scheduleHide();
   }
 
   void _startFastForward() {
-    if (!_ready || _seeking || _controller!.value.isPlaying == false) return;
+    if (!_ready ||
+        _seeking ||
+        _fastForward ||
+        !widget.active ||
+        _controller!.value.isPlaying == false) {
+      return;
+    }
     _originalSpeed = _controller!.value.playbackSpeed;
     _hideTimer?.cancel();
     setState(() => _fastForward = true);
-    _run((c) => c.setPlaybackSpeed(2));
+    _enterFastForward();
+  }
+
+  Future<void> _enterFastForward() async {
+    await _run((c) => c.setPlaybackSpeed(2));
+    if (!mounted || !_fastForward || _controller?.value.playbackSpeed != 2) {
+      return;
+    }
+    final platform = Theme.of(context).platform;
+    if (platform == TargetPlatform.android || platform == TargetPlatform.iOS) {
+      try {
+        await HapticFeedback.lightImpact();
+      } catch (error, stack) {
+        const AppLog(
+          'video_player_surface.dart',
+        ).e('_enterFastForward: 触感反馈失败', error, stack);
+      }
+    }
   }
 
   void _restoreSpeed() {
@@ -370,7 +410,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
       onSeekStart: _startSeek,
       onSeekPreview: _previewSeek,
       onSeekEnd: _endSeek,
-      onSpeed: (speed) => _run((c) => c.setPlaybackSpeed(speed)),
+      onSpeed: _selectSpeed,
       onMenu: (open) {
         _menuOpen = open;
         _scheduleHide();

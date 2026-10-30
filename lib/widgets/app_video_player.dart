@@ -4,11 +4,14 @@ import 'package:video_player/video_player.dart';
 
 import '../services/app_log.dart';
 import 'video_player_surface.dart';
+import '../services/playback_session.dart';
+import 'playback_route_guard.dart';
 
 /// Source resolution and controller ownership stay with the calling page.
 class AppVideoPlayer extends StatefulWidget {
   final VideoPlayerController? controller;
   final String title;
+  final PlaybackSession? session;
   final bool loading;
   final String? error;
   final VoidCallback? onRetry;
@@ -20,6 +23,7 @@ class AppVideoPlayer extends StatefulWidget {
     super.key,
     required this.controller,
     required this.title,
+    this.session,
     this.loading = false,
     this.error,
     this.onRetry,
@@ -35,7 +39,6 @@ class AppVideoPlayer extends StatefulWidget {
 class _AppVideoPlayerState extends State<AppVideoPlayer> {
   late final ValueNotifier<AppVideoPlayer> _source;
   bool _fullscreen = false;
-
   @override
   void initState() {
     super.initState();
@@ -106,17 +109,21 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
       backgroundColor: Colors.black,
       body: ValueListenableBuilder<AppVideoPlayer>(
         valueListenable: _source,
-        builder: (context, source, _) => VideoPlayerSurface(
-          controller: source.controller,
-          title: source.title,
-          loading: source.loading,
-          error: source.error,
-          onRetry: source.onRetry,
-          onPrevious: source.onPrevious,
-          onNext: source.onNext,
-          fullscreen: true,
-          onBack: () => Navigator.of(context).pop(),
-          onToggleFullscreen: () => Navigator.of(context).pop(),
+        builder: (context, source, _) => PlaybackRouteGuard(
+          session: source.session,
+          child: VideoPlayerSurface(
+            controller: source.controller,
+            session: source.session,
+            title: source.title,
+            loading: source.loading,
+            error: source.error,
+            onRetry: source.onRetry,
+            onPrevious: source.onPrevious,
+            onNext: source.onNext,
+            fullscreen: true,
+            onBack: () => Navigator.of(context).pop(),
+            onToggleFullscreen: () => Navigator.of(context).pop(),
+          ),
         ),
       ),
     );
@@ -124,20 +131,25 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    return Visibility(
-      visible: !_fullscreen,
-      maintainState: true,
-      child: VideoPlayerSurface(
-        controller: widget.controller,
-        title: widget.title,
-        loading: widget.loading,
-        error: widget.error,
-        onRetry: widget.onRetry,
-        onPrevious: widget.onPrevious,
-        onNext: widget.onNext,
-        onBack: widget.onBack,
-        active: !_fullscreen,
-        onToggleFullscreen: _openFullscreen,
+    return PlaybackRouteGuard(
+      session: widget.session,
+      ignoreCover: () => _fullscreen,
+      child: Visibility(
+        visible: !_fullscreen,
+        maintainState: true,
+        child: VideoPlayerSurface(
+          controller: widget.controller,
+          session: widget.session,
+          title: widget.title,
+          loading: widget.loading,
+          error: widget.error,
+          onRetry: widget.onRetry,
+          onPrevious: widget.onPrevious,
+          onNext: widget.onNext,
+          onBack: widget.onBack,
+          active: !_fullscreen,
+          onToggleFullscreen: _openFullscreen,
+        ),
       ),
     );
   }

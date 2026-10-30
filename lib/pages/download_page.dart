@@ -8,6 +8,7 @@ import '../models/download_task.dart';
 import '../services/album_update_checker.dart';
 import '../services/download_service.dart';
 import '../services/download_file_service.dart';
+import '../services/download_catalog.dart';
 import '../services/app_log.dart';
 import '../services/huangguo_api.dart';
 import '../services/html_parser.dart';
@@ -53,6 +54,9 @@ class _DownloadPageState extends State<DownloadPage>
   final Map<String, int> _conversionCompleted = {};
   final Set<String> _collapsedAlbums = {};
   final ScrollController _completedScrollController = ScrollController();
+  final TextEditingController _completedSearchController =
+      TextEditingController();
+  DownloadSortMode _completedSortMode = DownloadSortMode.name;
   bool _isAppInForeground = true;
 
   bool get _isMobile => DownloadFileService.isMobile;
@@ -90,6 +94,7 @@ class _DownloadPageState extends State<DownloadPage>
     _automaticCheckTimer?.cancel();
     widget.downloadService.removeListener(_onServiceChanged);
     _completedScrollController.dispose();
+    _completedSearchController.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
@@ -213,34 +218,31 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   Widget _buildCompletedTab() {
-    final completed = _ds.completedTasks;
+    final completed = DownloadCatalog.filter(
+      _ds.completedTasks,
+      _completedSearchController.text,
+    );
 
     if (completed.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle_outline, size: 64, color: Colors.grey[700]),
-            const SizedBox(height: 16),
-            Text(
-              '暂无已完成下载',
-              style: TextStyle(color: Colors.grey[500], fontSize: 16),
-            ),
-          ],
-        ),
+      return CustomScrollView(
+        controller: _completedScrollController,
+        slivers: [
+          _buildCompletedToolbar(),
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildCompletedEmptyState(),
+          ),
+        ],
       );
     }
 
-    final grouped = <String, List<DownloadTask>>{};
-    for (final task in completed) {
-      final key = '${task.dramaName} (${task.dramaId})';
-      grouped.putIfAbsent(key, () => []).add(task);
-    }
+    final grouped = DownloadCatalog.groupAndSort(completed, _completedSortMode);
     _pruneAlbumCheckState(grouped.keys.toSet());
 
     return CustomScrollView(
       controller: _completedScrollController,
       slivers: [
+        _buildCompletedToolbar(),
         for (final entry in grouped.entries)
           SliverMainAxisGroup(
             key: ValueKey(entry.key),
@@ -248,6 +250,127 @@ class _DownloadPageState extends State<DownloadPage>
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
       ],
+    );
+  }
+
+  Widget _buildCompletedToolbar() {
+    final totalCount = _ds.completedTasks.length;
+    final resultCount = DownloadCatalog.filter(
+      _ds.completedTasks,
+      _completedSearchController.text,
+    ).length;
+    final hasQuery = _completedSearchController.text.trim().isNotEmpty;
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+        child: Column(
+          children: [
+            TextField(
+              controller: _completedSearchController,
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: '搜索剧名、剧集或拼音',
+                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: Colors.grey,
+                ),
+                suffixIcon: hasQuery
+                    ? IconButton(
+                        tooltip: '清除搜索',
+                        icon: const Icon(Icons.clear_rounded, size: 18),
+                        onPressed: () {
+                          _completedSearchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFF242424),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  hasQuery
+                      ? '找到 $resultCount / $totalCount 集'
+                      : '$totalCount 集',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+                const Spacer(),
+                PopupMenuButton<DownloadSortMode>(
+                  tooltip: '排序方式',
+                  initialValue: _completedSortMode,
+                  onSelected: (mode) => setState(() {
+                    _completedSortMode = mode;
+                  }),
+                  itemBuilder: (_) => [
+                    for (final mode in DownloadSortMode.values)
+                      PopupMenuItem(value: mode, child: Text(mode.label)),
+                  ],
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.sort_rounded,
+                        size: 17,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _completedSortMode.label,
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompletedEmptyState() {
+    final hasQuery = _completedSearchController.text.trim().isNotEmpty;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            hasQuery ? Icons.search_off_rounded : Icons.check_circle_outline,
+            size: 64,
+            color: Colors.grey[700],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            hasQuery ? '没有匹配的已下载资源' : '暂无已完成下载',
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+          if (hasQuery) ...[
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                _completedSearchController.clear();
+                setState(() {});
+              },
+              child: const Text('清除搜索'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

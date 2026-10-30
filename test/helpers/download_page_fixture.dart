@@ -62,10 +62,13 @@ Future<TestDownloadService> mountDownloads(WidgetTester tester) async {
 
 ScrollPosition completedPosition(WidgetTester tester) => tester
     .state<ScrollableState>(
-      find.descendant(
-        of: find.byType(CustomScrollView),
-        matching: find.byType(Scrollable),
-      ),
+      find
+          .descendant(
+            of: find.byType(CustomScrollView),
+            matching: find.byType(Scrollable),
+          )
+          .hitTestable()
+          .first,
     )
     .position;
 

@@ -2,6 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import '../services/playback_session.dart';
+import '../services/playback_settings_service.dart';
+import '../services/playback_coordinator.dart';
+import '../widgets/playback_scope.dart';
 import '../models/episode.dart';
 import '../models/drama.dart';
 import '../models/playback_history.dart';
@@ -51,6 +55,8 @@ class _PlayerPageState extends State<PlayerPage> {
   Episode? _currentEp;
 
   VideoPlayerController? _controller;
+  PlaybackSession? _session;
+  PlaybackSettingsService? _ownedSettings;
   String? _streamUrl;
   bool _isLoading = false;
   String? _errorMessage;
@@ -74,7 +80,6 @@ class _PlayerPageState extends State<PlayerPage> {
     _allEpisodes = List.from(widget.allEpisodes);
     if (widget.initialEpisode != null) {
       _currentEp = widget.initialEpisode;
-      _resolveAndPlay();
     }
     // 从历史记录进入时，重新拉取剧集列表
     if (widget.dramaId != null && widget.dramaId!.isNotEmpty) {
@@ -102,8 +107,28 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = PlaybackScope.maybeOf(context);
+    if (_session == null) {
+      final settings =
+          scope?.settings ?? (_ownedSettings = PlaybackSettingsService());
+      _session = PlaybackSession(
+        settings,
+        scope?.coordinator ?? PlaybackCoordinator(),
+      );
+      settings.load();
+      _session!.setVisible(scope?.onlineVisible ?? true);
+      if (_currentEp != null) _resolveAndPlay();
+    }
+    _session!.setVisible(scope?.onlineVisible ?? true);
+  }
+
+  @override
   void dispose() {
     _log.d('dispose');
+    _session?.dispose();
+    _ownedSettings?.dispose();
     _loadGeneration++;
     _stopSaveTimer();
     _saveHistory();
@@ -185,6 +210,8 @@ class _PlayerPageState extends State<PlayerPage> {
       _streamUrl = null;
       _completionHandled = false;
     });
+    _session!.controller = null;
+    await _session!.begin();
     await _loadEpisode(episode, generation, previous);
   }
 
@@ -209,8 +236,13 @@ class _PlayerPageState extends State<PlayerPage> {
         await candidate.dispose();
         return;
       }
+      await _session!.attach(candidate);
+      if (!mounted || generation != _loadGeneration) {
+        await candidate.dispose();
+        return;
+      }
       _attachController(candidate, url);
-      await candidate.play();
+      if (mounted && generation == _loadGeneration) await _session!.play();
     } catch (error, stack) {
       if (candidate != null && candidate != _controller) {
         await candidate.dispose();
@@ -256,7 +288,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (value.isBuffering || _completionHandled) return;
     _completionHandled = true;
     _saveHistory();
-    if (_autoPlay) _playNextEpisode();
+    if (_autoPlay && _session!.canPlay) _playNextEpisode();
   }
 
   void _playNextEpisode() {
@@ -485,6 +517,7 @@ class _PlayerPageState extends State<PlayerPage> {
       height: _playerHeight,
       child: AppVideoPlayer(
         controller: _controller,
+        session: _session,
         title: _currentEp?.name ?? '播放器',
         loading: _isLoading,
         error: _errorMessage,

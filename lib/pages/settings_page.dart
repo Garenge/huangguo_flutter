@@ -9,11 +9,14 @@ import '../widgets/network_diagnostics_tile.dart';
 import '../services/huangguo_api.dart';
 import '../services/site_endpoint_service.dart';
 import '../widgets/site_endpoint_tile.dart';
+import '../services/playback_settings_service.dart';
+import '../widgets/playback_settings_tile.dart';
 
 const _log = AppLog('SettingsPage');
 
 class SettingsPage extends StatefulWidget {
   final ProxySettingsService proxyService;
+  final PlaybackSettingsService? playbackSettings;
   final SourceLoader? sourceLoader;
   final HuangguoApi? api;
   final SiteEndpointService? siteService;
@@ -21,6 +24,7 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
     required this.proxyService,
+    this.playbackSettings,
     this.sourceLoader,
     this.api,
     this.siteService,
@@ -105,7 +109,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: const Text('代理设置'),
+        title: const Text('设置'),
         backgroundColor: const Color(0xFF0D0D0D),
         actions: [
           if (_dirty)
@@ -120,6 +124,8 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.playbackSettings != null)
+            PlaybackSettingsTile(settings: widget.playbackSettings!),
           if (widget.sourceLoader != null)
             SourceUpdateTile(sourceLoader: widget.sourceLoader!),
           if (widget.siteService != null)

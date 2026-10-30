@@ -20,6 +20,10 @@ import 'services/proxy_settings_service.dart';
 import 'services/app_log.dart';
 import 'services/site_endpoint_service.dart';
 import 'services/data_migration_service.dart';
+import 'services/playback_settings_service.dart';
+import 'services/playback_coordinator.dart';
+import 'widgets/playback_scope.dart';
+import 'services/playback_route_observer.dart';
 import 'package:path_provider/path_provider.dart';
 
 const _log = AppLog('MainShell');
@@ -35,6 +39,7 @@ class HuangguoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '黄果短剧',
+      navigatorObservers: [playbackRootObserver],
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -65,6 +70,10 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
+  final _playbackSettings = PlaybackSettingsService();
+  final _playbackCoordinator = PlaybackCoordinator();
+  final _playerObserver = createPlaybackRouteObserver();
+  final _downloadObserver = createPlaybackRouteObserver();
 
   late final Future<void> _networkReady;
   late final ProxySettingsService _proxyService;
@@ -94,6 +103,7 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _log.i('initState start');
+    _playbackSettings.load();
 
     // 1) 先用平台默认值创建服务（不读磁盘，避免阻塞）
     _proxyService = ProxySettingsService();
@@ -146,6 +156,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _playbackSettings.dispose();
     _proxyService.removeListener(_onProxyChanged);
     _proxyService.dispose();
     _siteService.removeListener(_onSiteChanged);
@@ -211,42 +222,54 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildHomeTab(),
-          _buildPlayerTab(),
-          _buildSearchTab(),
-          _buildParseTab(),
-          _buildDownloadTab(),
-          _buildSettingsTab(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: '首页'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.play_circle_rounded),
-            label: '播放',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search_rounded),
-            label: '搜索',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.code_rounded), label: '解析'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.download_rounded),
-            label: '下载',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_rounded),
-            label: '设置',
-          ),
-        ],
+    return PlaybackScope(
+      settings: _playbackSettings,
+      coordinator: _playbackCoordinator,
+      onlineVisible: _currentIndex == 1,
+      localVisible: _currentIndex == 4,
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: [
+            _buildHomeTab(),
+            _buildPlayerTab(),
+            _buildSearchTab(),
+            _buildParseTab(),
+            _buildDownloadTab(),
+            _buildSettingsTab(),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: '首页',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.play_circle_rounded),
+              label: '播放',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.search_rounded),
+              label: '搜索',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.code_rounded),
+              label: '解析',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.download_rounded),
+              label: '下载',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_rounded),
+              label: '设置',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -254,6 +277,7 @@ class _MainShellState extends State<MainShell> {
   Widget _buildSettingsTab() {
     return SettingsPage(
       proxyService: _proxyService,
+      playbackSettings: _playbackSettings,
       sourceLoader: _sourceLoader,
       api: _api,
       siteService: _siteService,
@@ -283,6 +307,7 @@ class _MainShellState extends State<MainShell> {
   Widget _buildPlayerTab() {
     return Navigator(
       key: _playerNavKey,
+      observers: [_playerObserver],
       onGenerateRoute: (_) => MaterialPageRoute(
         builder: (_) => PlayerPage(
           api: _api,
@@ -325,6 +350,7 @@ class _MainShellState extends State<MainShell> {
   Widget _buildDownloadTab() {
     return Navigator(
       key: _downloadNavKey,
+      observers: [_downloadObserver],
       onGenerateRoute: (_) => MaterialPageRoute(
         builder: (_) => DownloadPage(
           downloadService: _downloadService,
