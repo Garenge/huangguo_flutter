@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,7 @@ class DownloadFileService {
   static Future<void> openOrShareFolder({
     required String folderPath,
     required String shareTitle,
+    required Rect sharePositionOrigin,
   }) async {
     final folder = Directory(folderPath);
     if (!await folder.exists()) {
@@ -24,7 +26,11 @@ class DownloadFileService {
     if (isMobile) {
       final zipPath = await _createRawResourceZip(folder, shareTitle);
       _log.i('openOrShareFolder: sharing zip=$zipPath');
-      await Share.shareXFiles([XFile(zipPath)], text: shareTitle);
+      await Share.shareXFiles(
+        [XFile(zipPath)],
+        text: shareTitle,
+        sharePositionOrigin: sharePositionOrigin,
+      );
       return;
     }
 
@@ -34,6 +40,7 @@ class DownloadFileService {
   static Future<void> openOrShareFile({
     required String filePath,
     required String shareTitle,
+    required Rect sharePositionOrigin,
   }) async {
     final file = File(filePath);
     if (!await file.exists()) {
@@ -42,7 +49,11 @@ class DownloadFileService {
 
     if (isMobile) {
       _log.i('openOrShareFile: sharing file=$filePath');
-      await Share.shareXFiles([XFile(filePath)], text: shareTitle);
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: shareTitle,
+        sharePositionOrigin: sharePositionOrigin,
+      );
       return;
     }
 

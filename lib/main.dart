@@ -23,6 +23,8 @@ import 'services/data_migration_service.dart';
 import 'services/playback_settings_service.dart';
 import 'services/playback_coordinator.dart';
 import 'widgets/playback_scope.dart';
+import 'widgets/library_scope.dart';
+import 'services/library_service.dart';
 import 'services/playback_route_observer.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -72,6 +74,7 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
   final _playbackSettings = PlaybackSettingsService();
   final _playbackCoordinator = PlaybackCoordinator();
+  final _library = LibraryService();
   final _playerObserver = createPlaybackRouteObserver();
   final _downloadObserver = createPlaybackRouteObserver();
 
@@ -127,6 +130,8 @@ class _MainShellState extends State<MainShell> {
     } catch (error, stack) {
       _log.e('启动数据迁移校验失败，保留原数据继续启动', error, stack);
     }
+    await _library.load();
+    await _library.importHistory(await _historyService.getEntries());
     await _proxyService.load();
     _siteService.updateProxy(_proxyService.settings);
     await _siteService.load();
@@ -156,6 +161,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _library.dispose();
     _playbackSettings.dispose();
     _proxyService.removeListener(_onProxyChanged);
     _proxyService.dispose();
@@ -221,7 +227,10 @@ class _MainShellState extends State<MainShell> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      LibraryScope(library: _library, child: _buildShell());
+
+  Widget _buildShell() {
     return PlaybackScope(
       settings: _playbackSettings,
       coordinator: _playbackCoordinator,

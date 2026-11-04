@@ -17,6 +17,9 @@ import '../services/playback_history_service.dart';
 import '../services/app_log.dart';
 import '../widgets/episode_grid.dart';
 import '../widgets/app_video_player.dart';
+import '../widgets/library_scope.dart';
+import '../widgets/watch_progress.dart';
+import '../services/library_service.dart';
 
 const _log = AppLog('PlayerPage');
 
@@ -51,6 +54,7 @@ class PlayerPage extends StatefulWidget {
 }
 
 class _PlayerPageState extends State<PlayerPage> {
+  LibraryService? _library;
   StreamResolver? _resolver;
   Episode? _currentEp;
 
@@ -109,6 +113,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _library = LibraryScope.maybeOf(context);
     final scope = PlaybackScope.maybeOf(context);
     if (_session == null) {
       final settings =
@@ -280,6 +285,15 @@ class _PlayerPageState extends State<PlayerPage> {
     final value = _controller?.value;
     if (value == null || value.duration <= Duration.zero || value.hasError) {
       return;
+    }
+    if (_currentEp != null) {
+      recordWatchProgress(
+        library: _library,
+        value: value,
+        dramaId: widget.dramaId,
+        dramaName: widget.dramaName ?? _currentEp!.name,
+        ep: _currentEp!.ep,
+      );
     }
     if (value.position < value.duration) {
       _completionHandled = false;

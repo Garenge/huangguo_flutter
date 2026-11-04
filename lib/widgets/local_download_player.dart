@@ -10,6 +10,9 @@ import 'playback_scope.dart';
 import '../models/download_task.dart';
 import '../services/local_media_server.dart';
 import 'app_video_player.dart';
+import 'library_scope.dart';
+import 'watch_progress.dart';
+import '../services/library_service.dart';
 
 /// 已下载剧集的连续播放器，支持同专辑内切集和自动播放下一集。
 class LocalDownloadPlayer extends StatefulWidget {
@@ -27,6 +30,7 @@ class LocalDownloadPlayer extends StatefulWidget {
 }
 
 class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
+  LibraryService? _library;
   final LocalMediaServer _server = LocalMediaServer();
   VideoPlayerController? _controller;
   PlaybackSession? _session;
@@ -55,6 +59,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _library = LibraryScope.maybeOf(context);
     final scope = PlaybackScope.maybeOf(context);
     if (_session == null) {
       final settings =
@@ -168,6 +173,13 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     if (value == null || value.duration <= Duration.zero || value.hasError) {
       return;
     }
+    recordWatchProgress(
+      library: _library,
+      value: value,
+      dramaId: _currentTask.dramaId,
+      dramaName: _currentTask.dramaName,
+      ep: _currentTask.ep,
+    );
     if (value.position < value.duration) {
       _completionHandled = false;
       return;
@@ -277,6 +289,9 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   Widget _buildEpisodeTile(int index) {
     final task = _tasks[index];
     final isSelected = task.id == _currentTask.id;
+    final watched =
+        _library?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
+        false;
     return ListTile(
       selected: isSelected,
       selectedTileColor: Colors.orange.withValues(alpha: 0.12),
@@ -286,8 +301,17 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
       ),
       title: Text(
         task.episodeName,
-        style: TextStyle(color: isSelected ? Colors.orange : Colors.white70),
+        style: TextStyle(
+          color: isSelected
+              ? Colors.orange
+              : watched
+              ? Colors.white38
+              : Colors.white70,
+        ),
       ),
+      subtitle: watched
+          ? const Text('看过', style: TextStyle(color: Colors.white38))
+          : null,
       trailing: Text(
         '${index + 1}',
         style: const TextStyle(color: Colors.grey),

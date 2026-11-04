@@ -14,8 +14,13 @@ import 'local_video_platform.dart';
 import 'package:huangguo_flutter/widgets/playback_scope.dart';
 import 'package:huangguo_flutter/services/playback_settings_service.dart';
 import 'package:huangguo_flutter/services/playback_coordinator.dart';
+import 'package:huangguo_flutter/services/library_service.dart';
+import 'package:huangguo_flutter/widgets/library_scope.dart';
 
-Future<void> mountLocalDownloads(WidgetTester tester) async {
+Future<void> mountLocalDownloads(
+  WidgetTester tester, {
+  LibraryService? library,
+}) async {
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
     SystemChannels.platform,
     (_) async => null,
@@ -40,15 +45,16 @@ Future<void> mountLocalDownloads(WidgetTester tester) async {
   final settings = PlaybackSettingsService(directory: directory);
   await tester.runAsync(settings.load);
   final tasks = List.generate(40, (index) => _localTask(index, path));
-  await tester.pumpWidget(
-    MaterialApp(
-      home: PlaybackScope(
-        settings: settings,
-        coordinator: PlaybackCoordinator(),
-        onlineVisible: false,
-        child: LocalDownloadPlayer(tasks: tasks, initialTask: tasks.first),
-      ),
+  final content = MaterialApp(
+    home: PlaybackScope(
+      settings: settings,
+      coordinator: PlaybackCoordinator(),
+      onlineVisible: false,
+      child: LocalDownloadPlayer(tasks: tasks, initialTask: tasks.first),
     ),
+  );
+  await tester.pumpWidget(
+    library == null ? content : LibraryScope(library: library, child: content),
   );
   await pumpLocalPlayer(tester);
 }

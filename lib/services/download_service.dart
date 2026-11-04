@@ -84,6 +84,10 @@ class DownloadService extends ChangeNotifier {
       _tasks.where((t) => t.status == DownloadStatus.downloading).toList();
   List<DownloadTask> get completedTasks =>
       _tasks.where((t) => t.status == DownloadStatus.completed).toList();
+  Set<String> get downloadedDramaIds => {
+    for (final task in tasks)
+      if (isEpisodeDownloadedForTask(task)) task.dramaId,
+  };
   List<DownloadTask> get pendingTasks => _tasks
       .where(
         (t) =>

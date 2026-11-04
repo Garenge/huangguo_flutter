@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import '../models/drama.dart';
 import '../models/channel_page.dart';
@@ -12,6 +13,7 @@ import '../services/download_service.dart';
 import '../services/app_log.dart';
 import '../widgets/drama_card.dart';
 import '../widgets/loading_indicator.dart';
+import 'favorites_page.dart';
 
 const _log = AppLog('HomePage');
 
@@ -86,7 +88,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final ImageDecryptor _imageDecryptor = ImageDecryptor();
   late HtmlParser _htmlParser;
 
@@ -106,14 +108,18 @@ class _HomePageState extends State<HomePage> {
 
   final Map<String, Uint8List?> _imageCache = {};
   final Map<String, Future<Uint8List?>> _imageRequests = {};
+  Set<String> _downloadedDramaIds = {};
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _log.i('initState');
     _htmlParser = HtmlParser(widget.api.site);
     widget.sourceLoader.addListener(_onRulesUpdated);
     widget.api.addListener(_onSiteChanged);
+    _downloadedDramaIds = widget.downloadService.downloadedDramaIds;
+    widget.downloadService.addListener(_onDownloadsChanged);
     _loadSource();
   }
 
@@ -144,10 +150,45 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.downloadService.removeListener(_onDownloadsChanged);
     widget.sourceLoader.removeListener(_onRulesUpdated);
     widget.api.removeListener(_onSiteChanged);
     super.dispose();
   }
+
+  void _onDownloadsChanged() {
+    if (!mounted) return;
+    final downloaded = widget.downloadService.downloadedDramaIds;
+    if (setEquals(downloaded, _downloadedDramaIds)) return;
+    setState(() => _downloadedDramaIds = downloaded);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onDownloadsChanged();
+  }
+
+  void _showFavorites() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FavoritesPage(
+          downloadService: widget.downloadService,
+          onOpenDetail: widget.onOpenDetail,
+          loadImage: _loadDecryptedImage,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLibraryBar() => Align(
+    alignment: Alignment.centerRight,
+    child: TextButton.icon(
+      onPressed: _showFavorites,
+      icon: const Icon(Icons.star_rounded, color: Colors.amber),
+      label: const Text('我的收藏'),
+    ),
+  );
 
   void _onSiteChanged() {
     if (!mounted || _sourceConfig == null || _isLoadingSource) return;
@@ -322,6 +363,7 @@ class _HomePageState extends State<HomePage> {
       bottom: false,
       child: Column(
         children: [
+          _buildLibraryBar(),
           _buildStatusBar(),
           if (_sourceConfig != null) _buildCategoryTabs(),
           if (_channelTabs.isNotEmpty) _buildChannelTabs(),
@@ -484,6 +526,7 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
+    final downloaded = _downloadedDramaIds;
     return RefreshIndicator(
       onRefresh: _retry,
       child: GridView.builder(
@@ -502,6 +545,7 @@ class _HomePageState extends State<HomePage> {
             builder: (_, snapshot) {
               return DramaCard(
                 drama: drama,
+                downloaded: downloaded.contains(drama.id),
                 onTap: () {
                   final openWithImage = widget.onOpenDetailWithImage;
                   if (openWithImage != null) {

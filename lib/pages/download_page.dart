@@ -9,12 +9,15 @@ import '../services/album_update_checker.dart';
 import '../services/download_service.dart';
 import '../services/download_file_service.dart';
 import '../services/download_catalog.dart';
+import '../services/download_settings_service.dart';
 import '../services/app_log.dart';
 import '../services/huangguo_api.dart';
 import '../services/html_parser.dart';
 import '../services/video_conversion_service.dart';
 import '../widgets/download_task_tile.dart';
 import '../widgets/local_download_player.dart';
+import '../widgets/library_scope.dart';
+import '../widgets/share_origin.dart';
 
 const _log = AppLog('DownloadPage');
 const _automaticCheckInterval = Duration(minutes: 30);
@@ -25,6 +28,7 @@ class DownloadPage extends StatefulWidget {
   final HuangguoApi api;
   final HtmlParser htmlParser;
   final void Function(Drama drama) onOpenDetail;
+  final DownloadSettingsService? downloadSettings;
 
   const DownloadPage({
     super.key,
@@ -32,6 +36,7 @@ class DownloadPage extends StatefulWidget {
     required this.api,
     required this.htmlParser,
     required this.onOpenDetail,
+    this.downloadSettings,
   });
 
   @override
@@ -56,7 +61,9 @@ class _DownloadPageState extends State<DownloadPage>
   final ScrollController _completedScrollController = ScrollController();
   final TextEditingController _completedSearchController =
       TextEditingController();
-  DownloadSortMode _completedSortMode = DownloadSortMode.name;
+  late final DownloadSettingsService _downloadSettings;
+  DownloadSortMode _completedSortMode = DownloadSortMode.recent;
+  bool _sortModeSelected = false;
   bool _isAppInForeground = true;
 
   bool get _isMobile => DownloadFileService.isMobile;
@@ -73,6 +80,8 @@ class _DownloadPageState extends State<DownloadPage>
   @override
   void initState() {
     super.initState();
+    _downloadSettings = widget.downloadSettings ?? DownloadSettingsService();
+    unawaited(_loadSortMode());
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
     _conversionService = VideoConversionService(widget.downloadService);
@@ -103,6 +112,20 @@ class _DownloadPageState extends State<DownloadPage>
   void _onServiceChanged() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _loadSortMode() async {
+    await _downloadSettings.load();
+    if (!mounted || _sortModeSelected) return;
+    setState(() => _completedSortMode = _downloadSettings.sortMode);
+  }
+
+  void _selectSortMode(DownloadSortMode mode) {
+    setState(() {
+      _sortModeSelected = true;
+      _completedSortMode = mode;
+    });
+    unawaited(_downloadSettings.setSortMode(mode));
   }
 
   void _onTabChanged() {
@@ -309,9 +332,7 @@ class _DownloadPageState extends State<DownloadPage>
                 PopupMenuButton<DownloadSortMode>(
                   tooltip: '排序方式',
                   initialValue: _completedSortMode,
-                  onSelected: (mode) => setState(() {
-                    _completedSortMode = mode;
-                  }),
+                  onSelected: _selectSortMode,
                   itemBuilder: (_) => [
                     for (final mode in DownloadSortMode.values)
                       PopupMenuItem(value: mode, child: Text(mode.label)),
@@ -436,7 +457,7 @@ class _DownloadPageState extends State<DownloadPage>
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        _conversionStatus[dramaKey] ?? '${tasks.length} 集',
+                        _conversionStatus[dramaKey] ?? _watchSummary(tasks),
                         style: TextStyle(color: Colors.grey[500], fontSize: 12),
                       ),
                     ],
@@ -462,6 +483,18 @@ class _DownloadPageState extends State<DownloadPage>
         ),
       ),
     );
+  }
+
+  String _watchSummary(List<DownloadTask> tasks) {
+    final library = LibraryScope.maybeOf(context);
+    final count = tasks
+        .where(
+          (task) =>
+              library?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
+              false,
+        )
+        .length;
+    return '看过 $count / 已下载 ${tasks.length} 集';
   }
 
   Widget _buildAlbumUpdateButton(
@@ -510,11 +543,19 @@ class _DownloadPageState extends State<DownloadPage>
 
   Widget _buildCompletedTaskTile(DownloadTask task) {
     final hasMp4 = _hasValidMp4(task);
+    final watched =
+        LibraryScope.maybeOf(
+          context,
+        )?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
+        false;
     return Container(
       color: Colors.grey[900],
       padding: const EdgeInsets.only(left: 12),
       child: ListTile(
         dense: true,
+        subtitle: watched
+            ? const Text('看过', style: TextStyle(color: Colors.white38))
+            : null,
         leading: Icon(
           hasMp4 ? Icons.video_file : Icons.play_circle_outline,
           color: Colors.green,
@@ -525,7 +566,10 @@ class _DownloadPageState extends State<DownloadPage>
             Expanded(
               child: Text(
                 task.episodeName,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(
+                  color: watched ? Colors.white38 : Colors.white70,
+                  fontSize: 13,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -661,11 +705,16 @@ class _DownloadPageState extends State<DownloadPage>
 
     if (result.success && result.outputPath != null) {
       final deleteSource = await _confirmDeleteSource(task);
+      if (!mounted) return;
       if (deleteSource) {
         await _deleteSourceFiles(task);
       }
+      if (!mounted) return;
       try {
-        await Share.shareXFiles([XFile(result.outputPath!)]);
+        await Share.shareXFiles(
+          [XFile(result.outputPath!)],
+          sharePositionOrigin: shareOriginFor(context),
+        );
       } catch (e) {
         _showSnack('分享失败: $e');
       }
@@ -754,6 +803,7 @@ class _DownloadPageState extends State<DownloadPage>
         await DownloadFileService.openOrShareFolder(
           folderPath: folderPath,
           shareTitle: '${task.dramaName} - ${task.episodeName} 原始资源',
+          sharePositionOrigin: shareOriginFor(context),
         );
       }
     } catch (e, stack) {
@@ -773,6 +823,7 @@ class _DownloadPageState extends State<DownloadPage>
       await DownloadFileService.openOrShareFile(
         filePath: mp4Path,
         shareTitle: '${task.dramaName} - ${task.episodeName}.mp4',
+        sharePositionOrigin: shareOriginFor(context),
       );
     } catch (e, stack) {
       _log.e('_openMp4: failed episode=${task.episodeName}', e, stack);

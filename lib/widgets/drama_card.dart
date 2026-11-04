@@ -1,21 +1,29 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/drama.dart';
+import 'library_scope.dart';
+import 'favorite_button.dart';
+import 'drama_status_badges.dart';
 
 class DramaCard extends StatelessWidget {
   final Drama drama;
   final VoidCallback onTap;
   final Uint8List? decryptedImage;
+  final bool downloaded;
 
   const DramaCard({
     super.key,
     required this.drama,
     required this.onTap,
     this.decryptedImage,
+    this.downloaded = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final watched =
+        LibraryScope.maybeOf(context)?.hasWatched(drama.id, drama.name) ??
+        false;
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -29,7 +37,10 @@ class DramaCard extends StatelessWidget {
                 // Image
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: _buildImage(),
+                  child: Opacity(
+                    opacity: watched ? 0.45 : 1,
+                    child: _buildImage(),
+                  ),
                 ),
 
                 // Score badge (top-right)
@@ -80,6 +91,16 @@ class DramaCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                _buildFavorite(),
+                Positioned(
+                  bottom: 25,
+                  left: 4,
+                  right: 4,
+                  child: DramaStatusBadges(
+                    watched: watched,
+                    downloaded: downloaded,
+                  ),
+                ),
               ],
             ),
           ),
@@ -91,10 +112,10 @@ class DramaCard extends StatelessWidget {
               drama.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: Colors.white,
+                color: watched ? Colors.white38 : Colors.white,
               ),
             ),
           ),
@@ -102,6 +123,18 @@ class DramaCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildFavorite() => Positioned(
+    top: 0,
+    left: 0,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: FavoriteButton(drama: drama),
+    ),
+  );
 
   bool get _hasScore {
     // Check if remark contains a score like "8.8分"

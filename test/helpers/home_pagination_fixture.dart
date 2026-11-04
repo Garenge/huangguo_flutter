@@ -7,6 +7,8 @@ import 'package:huangguo_flutter/pages/home_page.dart';
 import 'package:huangguo_flutter/services/download_service.dart';
 import 'package:huangguo_flutter/services/huangguo_api.dart';
 import 'package:huangguo_flutter/services/source_loader.dart';
+import 'package:huangguo_flutter/services/library_service.dart';
+import 'package:huangguo_flutter/widgets/library_scope.dart';
 
 class PaginationApi extends HuangguoApi {
   final requests = <String>[];
@@ -77,27 +79,32 @@ class _PaginationSource extends SourceLoader {
   );
 }
 
-Future<PaginationApi> mountPaginationHome(WidgetTester tester) async {
+Future<PaginationApi> mountPaginationHome(
+  WidgetTester tester, {
+  LibraryService? library,
+  DownloadService Function(HuangguoApi)? createDownloads,
+}) async {
   final api = PaginationApi();
   final source = _PaginationSource();
-  final downloads = DownloadService(api);
+  final downloads = createDownloads?.call(api) ?? DownloadService(api);
   addTearDown(() {
     downloads.dispose();
     source.dispose();
     api.dispose();
   });
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: HomePage(
-          api: api,
-          sourceLoader: source,
-          downloadService: downloads,
-          onOpenDetail: (_) {},
-          onPlayEpisode: (_, _, _) {},
-        ),
+  final content = MaterialApp(
+    home: Scaffold(
+      body: HomePage(
+        api: api,
+        sourceLoader: source,
+        downloadService: downloads,
+        onOpenDetail: (_) {},
+        onPlayEpisode: (_, _, _) {},
       ),
     ),
+  );
+  await tester.pumpWidget(
+    library == null ? content : LibraryScope(library: library, child: content),
   );
   await tester.pumpAndSettle();
   return api;

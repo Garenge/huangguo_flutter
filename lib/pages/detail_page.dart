@@ -10,6 +10,7 @@ import '../services/image_decryptor.dart';
 import '../services/download_service.dart';
 import '../services/app_log.dart';
 import '../widgets/loading_indicator.dart';
+import '../widgets/favorite_button.dart';
 
 const _log = AppLog('DetailPage');
 
@@ -219,6 +220,7 @@ class _DetailPageState extends State<DetailPage> {
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
         title: Text(widget.drama.name),
+        actions: [FavoriteButton(drama: widget.drama)],
         backgroundColor: const Color(0xFF0D0D0D),
       ),
       body: _isLoading
