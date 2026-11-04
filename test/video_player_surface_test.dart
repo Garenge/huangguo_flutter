@@ -11,6 +11,7 @@ Future<void> mountPlayer(
   bool fullscreen = false,
   VoidCallback? next,
   double width = 380,
+  EdgeInsets safePadding = EdgeInsets.zero,
 }) {
   return tester.pumpWidget(
     MaterialApp(
@@ -19,12 +20,15 @@ Future<void> mountPlayer(
           child: SizedBox(
             width: width,
             height: 240,
-            child: VideoPlayerSurface(
-              controller: controller,
-              title: '测试视频',
-              fullscreen: fullscreen,
-              onNext: next,
-              onToggleFullscreen: () {},
+            child: MediaQuery(
+              data: MediaQueryData(padding: safePadding),
+              child: VideoPlayerSurface(
+                controller: controller,
+                title: '测试视频',
+                fullscreen: fullscreen,
+                onNext: next,
+                onToggleFullscreen: () {},
+              ),
             ),
           ),
         ),
@@ -113,8 +117,67 @@ void main() {
     final gesture = await tester.startGesture(origin + const Offset(100, 40));
     await tester.pump(const Duration(milliseconds: 600));
     expect(controller.value.playbackSpeed, 2);
+    expect(find.text('2.0x 快进中'), findsOneWidget);
     await gesture.up();
     await tester.pump();
+    expect(controller.value.playbackSpeed, 1.5);
+    expect(find.text('2.0x 快进中'), findsNothing);
+    await removePlayer(tester, controller);
+  });
+
+  for (final fullscreen in [false, true]) {
+    testWidgets(
+      'fast-forward hint sits at bottom right, fullscreen=$fullscreen',
+      (tester) async {
+        final controller = TestVideoController();
+        await mountPlayer(tester, controller, fullscreen: fullscreen);
+        final surface = tester.getRect(find.byType(VideoPlayerSurface));
+        final gesture = await tester.startGesture(
+          surface.topLeft + const Offset(100, 40),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        final hint = tester.getRect(
+          find.ancestor(
+            of: find.text('2.0x 快进中'),
+            matching: find.byType(DecoratedBox),
+          ),
+        );
+        expect(hint.right, closeTo(surface.right - 12, 0.01));
+        expect(hint.bottom, closeTo(surface.bottom - 12, 0.01));
+        await gesture.up();
+        await tester.pump();
+        expect(find.text('2.0x 快进中'), findsNothing);
+        await removePlayer(tester, controller);
+      },
+    );
+  }
+
+  testWidgets('fast-forward hint respects safe area and clears on cancel', (
+    tester,
+  ) async {
+    final controller = TestVideoController(speed: 1.5);
+    await mountPlayer(
+      tester,
+      controller,
+      fullscreen: true,
+      safePadding: const EdgeInsets.only(right: 28, bottom: 36),
+    );
+    final surface = tester.getRect(find.byType(VideoPlayerSurface));
+    final gesture = await tester.startGesture(
+      surface.topLeft + const Offset(100, 40),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    final hint = tester.getRect(
+      find.ancestor(
+        of: find.text('2.0x 快进中'),
+        matching: find.byType(DecoratedBox),
+      ),
+    );
+    expect(hint.right, closeTo(surface.right - 28, 0.01));
+    expect(hint.bottom, closeTo(surface.bottom - 36, 0.01));
+    await gesture.cancel();
+    await tester.pump();
+    expect(find.text('2.0x 快进中'), findsNothing);
     expect(controller.value.playbackSpeed, 1.5);
     await removePlayer(tester, controller);
   });

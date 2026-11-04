@@ -381,8 +381,12 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
     return const Center(child: CircularProgressIndicator(color: Colors.orange));
   }
 
-  Widget _buildMessage(String message) {
-    return Center(
+  Widget _buildMessage(
+    String message, {
+    Alignment alignment = Alignment.center,
+  }) {
+    return Align(
+      alignment: alignment,
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -480,7 +484,11 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
           '${formatPlaybackTime(_preview!)} / '
           '${formatPlaybackTime(value.duration)}\n松开跳转',
         ),
-      if (_fastForward) _buildMessage('2.0x 快进中'),
+      if (_fastForward)
+        SafeArea(
+          minimum: const EdgeInsets.all(12),
+          child: _buildMessage('2.0x 快进中', alignment: Alignment.bottomRight),
+        ),
     ];
   }
 
