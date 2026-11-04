@@ -29,6 +29,7 @@ class DownloadPage extends StatefulWidget {
   final HtmlParser htmlParser;
   final void Function(Drama drama) onOpenDetail;
   final DownloadSettingsService? downloadSettings;
+  final DateTime Function() now;
 
   const DownloadPage({
     super.key,
@@ -37,6 +38,7 @@ class DownloadPage extends StatefulWidget {
     required this.htmlParser,
     required this.onOpenDetail,
     this.downloadSettings,
+    this.now = DateTime.now,
   });
 
   @override
@@ -65,6 +67,7 @@ class _DownloadPageState extends State<DownloadPage>
   DownloadSortMode _completedSortMode = DownloadSortMode.recent;
   bool _sortModeSelected = false;
   bool _isAppInForeground = true;
+  bool _isAutomaticCheckRunning = false;
 
   bool get _isMobile => DownloadFileService.isMobile;
 
@@ -95,6 +98,9 @@ class _DownloadPageState extends State<DownloadPage>
       (_) => _runAutomaticCheck(),
     );
     widget.downloadService.addListener(_onServiceChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_runAutomaticCheck());
+    });
   }
 
   @override
@@ -137,6 +143,7 @@ class _DownloadPageState extends State<DownloadPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _isAppInForeground = state == AppLifecycleState.resumed;
+    if (_isAppInForeground) unawaited(_runAutomaticCheck());
   }
 
   @override
@@ -867,7 +874,7 @@ class _DownloadPageState extends State<DownloadPage>
         if (result.coverUrl.isNotEmpty) {
           _albumCoverUrls[dramaKey] = result.coverUrl;
         }
-        _lastAlbumCheckAt[dramaKey] = DateTime.now();
+        _lastAlbumCheckAt[dramaKey] = widget.now();
         _checkingAlbums.remove(dramaKey);
       });
 
@@ -883,7 +890,7 @@ class _DownloadPageState extends State<DownloadPage>
       if (!mounted) return;
       setState(() {
         _checkingAlbums.remove(dramaKey);
-        _lastAlbumCheckAt[dramaKey] = DateTime.now();
+        _lastAlbumCheckAt[dramaKey] = widget.now();
       });
       if (!automatic) _showSnack('检测更新失败：$e');
     }
@@ -921,24 +928,32 @@ class _DownloadPageState extends State<DownloadPage>
     );
   }
 
-  Future<void> _runAutomaticCheck() async {
-    if (!_isAppInForeground ||
-        _checkingAlbums.isNotEmpty ||
-        _convertingGroups.isNotEmpty ||
-        _ds.downloadingTasks.isNotEmpty ||
-        _ds.pendingTasks.isNotEmpty) {
-      return;
-    }
+  bool get _canAutomaticallyCheck =>
+      mounted &&
+      _isAppInForeground &&
+      _checkingAlbums.isEmpty &&
+      _convertingGroups.isEmpty &&
+      _ds.downloadingTasks.isEmpty &&
+      _ds.pendingTasks.isEmpty;
 
-    final grouped = _completedAlbums();
-    for (final entry in grouped.entries) {
-      final lastCheck = _lastAlbumCheckAt[entry.key];
-      if (lastCheck != null &&
-          DateTime.now().difference(lastCheck) < _automaticCheckInterval) {
-        continue;
+  Future<void> _runAutomaticCheck() async {
+    if (_isAutomaticCheckRunning || !_canAutomaticallyCheck) return;
+    _isAutomaticCheckRunning = true;
+    try {
+      final grouped = _completedAlbums();
+      for (final entry in grouped.entries) {
+        if (!_canAutomaticallyCheck) break;
+        final currentTasks = _completedAlbums()[entry.key];
+        if (currentTasks == null) continue;
+        final lastCheck = _lastAlbumCheckAt[entry.key];
+        if (lastCheck != null &&
+            widget.now().difference(lastCheck) < _automaticCheckInterval) {
+          continue;
+        }
+        await _checkAlbum(entry.key, currentTasks, automatic: true);
       }
-      await _checkAlbum(entry.key, entry.value, automatic: true);
-      return;
+    } finally {
+      _isAutomaticCheckRunning = false;
     }
   }
 

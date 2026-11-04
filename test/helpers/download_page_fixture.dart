@@ -13,15 +13,31 @@ import 'package:huangguo_flutter/widgets/library_scope.dart';
 
 class TestDownloadService extends DownloadService {
   final List<DownloadTask> completed;
+  bool hasPendingTasks = false;
 
   TestDownloadService(super.api, this.completed);
 
   @override
   List<DownloadTask> get completedTasks => List.unmodifiable(completed);
 
+  @override
+  List<DownloadTask> get pendingTasks =>
+      hasPendingTasks ? completed.take(1).toList() : [];
+
   void removeAlbum(String dramaId) {
     completed.removeWhere((task) => task.dramaId == dramaId);
     notifyListeners();
+  }
+}
+
+class TestAlbumApi extends HuangguoApi {
+  final List<String> checkedAlbums = [];
+  Future<String> Function(String)? onFetchDetail;
+
+  @override
+  Future<String> fetchDetail(String dramaId) async {
+    checkedAlbums.add(dramaId);
+    return onFetchDetail == null ? '' : await onFetchDetail!(dramaId);
   }
 }
 
@@ -44,6 +60,8 @@ Future<TestDownloadService> mountDownloads(
   LibraryService? library,
   DownloadSettingsService? downloadSettings,
   List<DownloadTask>? tasks,
+  TestAlbumApi? albumApi,
+  bool hasPendingTasks = false,
 }) async {
   if (downloadSettings == null) {
     final directory = Directory.systemTemp.createTempSync('download_page_sort');
@@ -51,7 +69,7 @@ Future<TestDownloadService> mountDownloads(
     downloadSettings = DownloadSettingsService(directory: directory);
   }
   await tester.runAsync(downloadSettings.load);
-  final api = HuangguoApi();
+  final api = albumApi ?? TestAlbumApi();
   final service = TestDownloadService(
     api,
     tasks ??
@@ -61,6 +79,7 @@ Future<TestDownloadService> mountDownloads(
           ...albumTasks('C', 25),
         ],
   );
+  service.hasPendingTasks = hasPendingTasks;
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox());
     service.dispose();
@@ -73,6 +92,7 @@ Future<TestDownloadService> mountDownloads(
       htmlParser: HtmlParser(api.site),
       onOpenDetail: (_) {},
       downloadSettings: downloadSettings,
+      now: tester.binding.clock.now,
     ),
   );
   await tester.pumpWidget(
