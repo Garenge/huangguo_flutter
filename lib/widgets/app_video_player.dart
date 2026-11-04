@@ -39,15 +39,23 @@ class AppVideoPlayer extends StatefulWidget {
 class _AppVideoPlayerState extends State<AppVideoPlayer> {
   late final ValueNotifier<AppVideoPlayer> _source;
   bool _fullscreen = false;
+  Route<void>? _fullscreenRoute;
+  bool _exitFullscreenScheduled = false;
+
   @override
   void initState() {
     super.initState();
     _source = ValueNotifier(widget);
+    widget.controller?.addListener(_onControllerChanged);
   }
 
   @override
   void didUpdateWidget(covariant AppVideoPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_onControllerChanged);
+      widget.controller?.addListener(_onControllerChanged);
+    }
     // The fullscreen route is a sibling, so notify it after this build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _source.value = widget;
@@ -56,8 +64,44 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_onControllerChanged);
     _source.dispose();
     super.dispose();
+  }
+
+  bool get _lastEpisodeCompleted {
+    final value = widget.controller?.value;
+    return widget.onNext == null &&
+        !widget.loading &&
+        widget.error == null &&
+        value != null &&
+        value.isInitialized &&
+        !value.hasError &&
+        !value.isBuffering &&
+        value.duration > Duration.zero &&
+        value.position >= value.duration;
+  }
+
+  void _onControllerChanged() {
+    final route = _fullscreenRoute;
+    if (_exitFullscreenScheduled ||
+        !_fullscreen ||
+        route == null ||
+        !route.isCurrent ||
+        !_lastEpisodeCompleted) {
+      return;
+    }
+    _exitFullscreenScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _exitFullscreenScheduled = false;
+      if (mounted &&
+          route == _fullscreenRoute &&
+          route.isCurrent &&
+          _lastEpisodeCompleted) {
+        route.navigator?.pop();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   Future<void> _setScreenMode(bool fullscreen) async {
@@ -94,11 +138,16 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
     try {
       await _setScreenMode(true);
       if (!mounted) return;
-      await Navigator.of(
+      final route = MaterialPageRoute<void>(builder: _buildFullscreen);
+      _fullscreenRoute = route;
+      final closed = Navigator.of(
         context,
         rootNavigator: true,
-      ).push<void>(MaterialPageRoute(builder: _buildFullscreen));
+      ).push<void>(route);
+      _onControllerChanged();
+      await closed;
     } finally {
+      _fullscreenRoute = null;
       await _setScreenMode(false);
       if (mounted) setState(() => _fullscreen = false);
     }

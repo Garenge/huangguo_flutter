@@ -90,4 +90,71 @@ void main() {
     expect(controller!.value.isPlaying, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('last downloaded episode exits fullscreen when finished', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester);
+    await tester.scrollUntilVisible(localEpisode('本地第40集'), 300);
+    await tester.drag(find.byType(ListView), const Offset(0, -200));
+    await pumpLocalPlayer(tester);
+    await tester.tap(localEpisode('本地第40集'));
+    await pumpLocalPlayer(tester);
+    final controller = localPlayer(tester).controller!;
+    expect(localPlayer(tester).onNext, isNull);
+    await tester.tap(find.byTooltip('全屏'));
+    await pumpLocalPlayer(tester);
+    await controller.pause();
+    controller.value = controller.value.copyWith(
+      position: controller.value.duration,
+      isPlaying: false,
+    );
+    await pumpLocalPlayer(tester);
+    await pumpLocalPlayer(tester);
+    expect(find.byTooltip('退出全屏'), findsNothing);
+    expect(find.byTooltip('全屏'), findsOneWidget);
+    expect(find.byType(ListView).hitTestable(), findsOneWidget);
+    expect(localPlayer(tester).controller, same(controller));
+    expect(localPlayer(tester).title, '本地第40集');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('downloaded autoplay keeps fullscreen between episodes', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester);
+    final controller = localPlayer(tester).controller!;
+    await tester.tap(find.byTooltip('全屏'));
+    await pumpLocalPlayer(tester);
+    await controller.pause();
+    controller.value = controller.value.copyWith(
+      position: controller.value.duration,
+      isPlaying: false,
+    );
+    await pumpLocalPlayer(tester);
+    expect(find.byTooltip('退出全屏'), findsOneWidget);
+    expect(find.text('本地第2集'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'disabled downloaded autoplay does not make a middle episode final',
+    (tester) async {
+      await mountLocalDownloads(tester);
+      await tester.tap(find.byType(Switch));
+      await pumpLocalPlayer(tester);
+      final controller = localPlayer(tester).controller!;
+      await tester.tap(find.byTooltip('全屏'));
+      await pumpLocalPlayer(tester);
+      await controller.pause();
+      controller.value = controller.value.copyWith(
+        position: controller.value.duration,
+        isPlaying: false,
+      );
+      await pumpLocalPlayer(tester);
+      expect(find.byTooltip('退出全屏'), findsOneWidget);
+      expect(find.text('本地第1集'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

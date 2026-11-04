@@ -61,6 +61,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   VideoPlayerController? get _controller => widget.controller;
   bool get _ready =>
       _controller?.value.isInitialized == true &&
+      (widget.session == null || widget.session!.controller == _controller) &&
       !widget.loading &&
       widget.error == null &&
       _controller?.value.hasError == false;
