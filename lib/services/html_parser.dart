@@ -377,25 +377,29 @@ class HtmlParser {
 
   String parsePlayUrl(String html, {String ep = '1'}) {
     final data = _parseEmbeddedVideoData(html);
-    if (data == null) {
-      _log.e('parsePlayUrl: videoInitialData script not found');
-      throw Exception('videoInitialData script not found');
-    }
-
     String? play;
-    final epPlaySrcs = data['epPlaySrcs'];
-    if (epPlaySrcs is Map) {
-      play =
-          epPlaySrcs[ep]?.toString() ??
-          epPlaySrcs[int.tryParse(ep)]?.toString();
+    if (data != null) {
+      final epPlaySrcs = data['epPlaySrcs'];
+      if (epPlaySrcs is Map) {
+        play =
+            epPlaySrcs[ep]?.toString() ??
+            epPlaySrcs[int.tryParse(ep)]?.toString();
+        if (play != null && play.isNotEmpty) {
+          _log.d('parsePlayUrl: found epPlaySrcs[$ep]');
+        }
+      }
+      if (play == null || play.isEmpty) {
+        play = _firstNonEmpty([data['videoSrc'], data['videoSrcHevc']]);
+      }
       if (play != null && play.isNotEmpty) {
-        _log.d('parsePlayUrl: found epPlaySrcs[$ep]');
+        _log.d('parsePlayUrl: found embedded video URL');
       }
     }
+
     if (play == null || play.isEmpty) {
-      play = data['videoSrc']?.toString();
+      play = _parseSourceUrl(html);
       if (play != null && play.isNotEmpty) {
-        _log.d('parsePlayUrl: found videoSrc');
+        _log.d('parsePlayUrl: found source URL');
       }
     }
 
@@ -418,5 +422,26 @@ class HtmlParser {
 
     _log.i('parsePlayUrl: $play');
     return play;
+  }
+
+  String? _firstNonEmpty(Iterable<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim();
+      if (text != null && text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  String? _parseSourceUrl(String html) {
+    final document = html_parser.parse(html);
+    final source = document.querySelector(
+      'video source[src], source[data-src], source[data-video-src]',
+    );
+    if (source == null) return null;
+    return _firstNonEmpty([
+      source.attributes['src'],
+      source.attributes['data-src'],
+      source.attributes['data-video-src'],
+    ]);
   }
 }

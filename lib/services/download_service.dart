@@ -457,9 +457,10 @@ class DownloadService extends ChangeNotifier {
         task.m3u8Url = m3u8Url;
       }
       _log.d('_downloadTask: m3u8Url=$m3u8Url');
+      final streamHeaders = _resolver.streamHeaders;
 
       // 2. 下载并解析 m3u8 播放列表，获取 TS 分片及加密信息
-      final segments = await _resolveM3u8(m3u8Url);
+      final segments = await _resolveM3u8(m3u8Url, headers: streamHeaders);
       if (segments.isEmpty) {
         throw Exception('m3u8 解析失败：未找到 TS 分片');
       }
@@ -489,7 +490,7 @@ class DownloadService extends ChangeNotifier {
             final keyName = 'key_${downloadedKeys.length}.bin';
             final keyPath = '${epDir.path}/$keyName';
             _log.i('_downloadTask: downloading key $uri -> $keyName');
-            await _downloadKeyFile(uri, keyPath);
+            await _downloadKeyFile(uri, keyPath, headers: streamHeaders);
             downloadedKeys[uri] = keyName;
           }
         }
@@ -515,6 +516,7 @@ class DownloadService extends ChangeNotifier {
           task,
           i,
           segments.length,
+          headers: streamHeaders,
         );
         tsFiles.add(tsPath);
       }
@@ -569,10 +571,14 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 下载密钥文件（二进制，通常 16 字节）
-  Future<void> _downloadKeyFile(String url, String savePath) async {
+  Future<void> _downloadKeyFile(
+    String url,
+    String savePath, {
+    Map<String, String> headers = const {},
+  }) async {
     final resp = await _downloadDio.get(
       url,
-      options: Options(responseType: ResponseType.bytes),
+      options: Options(responseType: ResponseType.bytes, headers: headers),
     );
     final bytes = resp.data as List<int>;
     await File(savePath).writeAsBytes(bytes);
@@ -580,10 +586,13 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 解析 m3u8：支持主播放列表和媒体播放列表
-  Future<List<_TsSegmentInfo>> _resolveM3u8(String m3u8Url) async {
+  Future<List<_TsSegmentInfo>> _resolveM3u8(
+    String m3u8Url, {
+    Map<String, String> headers = const {},
+  }) async {
     final resp = await _downloadDio.get(
       m3u8Url,
-      options: Options(responseType: ResponseType.plain),
+      options: Options(responseType: ResponseType.plain, headers: headers),
     );
     final content = resp.data as String;
 
@@ -597,7 +606,7 @@ class DownloadService extends ChangeNotifier {
         _log.d('_resolveM3u8: variant=$variantUrl');
         final subResp = await _downloadDio.get(
           variantUrl,
-          options: Options(responseType: ResponseType.plain),
+          options: Options(responseType: ResponseType.plain, headers: headers),
         );
         return _parseMediaPlaylist(subResp.data as String, variantUrl);
       }
@@ -742,12 +751,17 @@ class DownloadService extends ChangeNotifier {
     String savePath,
     DownloadTask task,
     int index,
-    int total,
-  ) async {
+    int total, {
+    Map<String, String> headers = const {},
+  }) async {
     int retries = 3;
     while (retries > 0) {
       try {
-        await _downloadDio.download(url, savePath);
+        await _downloadDio.download(
+          url,
+          savePath,
+          options: Options(headers: headers),
+        );
         final file = File(savePath);
         if (await file.exists()) {
           task.downloadedBytes += await file.length();

@@ -307,8 +307,20 @@ async function getPlayinfo(ext) {
             try {
                 const data = JSON.parse(m[1])
                 const srcs = (data && data.epPlaySrcs) || {}
-                play = srcs[ep] || (data && data.videoSrc) || ''
+                play =
+                    srcs[ep] ||
+                    (data && data.videoSrc) ||
+                    (data && data.videoSrcHevc) ||
+                    ''
             } catch (e) {}
+        }
+        if (!play) {
+            const source = html.match(
+                /<source\b[^>]*(?:src|data-src|data-video-src)="([^"]+)"/i,
+            )
+            if (source) {
+                play = source[1]
+            }
         }
         if (play) {
             play = play.replace(/\\u0026/g, '&')

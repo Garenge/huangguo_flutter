@@ -16,15 +16,9 @@ class SiteEndpointService extends ChangeNotifier {
   static const String primaryUrl = 'https://huangguoai.com';
   static const List<String> urls = [
     primaryUrl,
-    'https://l5f9m.rxzfszht.cc',
-    'https://blolhh.rxzfszht.cc',
-    'https://mxz58.rxzfszht.cc',
-    'https://owfv.rxzfszht.cc',
-    'https://zd43td.rxzfszht.cc',
-    'https://qp0h.rxzfszht.cc',
-    'https://olci.rxzfszht.cc',
-    'https://j5rs.rxzfszht.cc',
-    'https://lhsb.rxzfszht.cc',
+    'https://hgai12.com',
+    'https://0624.gitiecgad.cc',
+    'https://huangguoai.pages.dev',
   ];
   static const String _fileName = 'site_endpoint_settings.json';
 

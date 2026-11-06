@@ -194,6 +194,51 @@ class HuangguoApi extends ChangeNotifier {
   Future<String> fetchPlayPage(String url) =>
       _get(SiteAddress.resolve(site, url, episode: true), referer: site);
 
+  Future<Map<String, dynamic>> fetchPlayback(
+    String videoId, {
+    String? episode,
+  }) async {
+    var path = '$site/api/videos/$videoId';
+    if (episode != null && episode.isNotEmpty) {
+      path += '/episodes/$episode';
+    }
+    final url = '$path/playback';
+    _log.i('POST playback: video=$videoId, ep=${episode ?? "default"}');
+    try {
+      final response = await _dio.post<dynamic>(
+        url,
+        data: <String, dynamic>{},
+        options: Options(
+          headers: _headers(referer: site),
+          contentType: Headers.jsonContentType,
+          responseType: ResponseType.json,
+          connectTimeout: const Duration(seconds: 8),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
+      final raw = response.data;
+      final body = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+      final payload = body['data'] is Map<String, dynamic>
+          ? body['data'] as Map<String, dynamic>
+          : body;
+      final streams = payload['streams'];
+      final main = streams is Map<String, dynamic>
+          ? streams['main']?.toString()
+          : null;
+      if (main == null || main.isEmpty) {
+        throw const FormatException('播放接口未返回主播放地址');
+      }
+      _log.i(
+        'POST playback ok: video=$videoId, ep=${payload['ep'] ?? episode}, '
+        'stream=${main.length} chars',
+      );
+      return payload;
+    } catch (e) {
+      _log.e('POST playback failed: video=$videoId, ep=$episode', e);
+      rethrow;
+    }
+  }
+
   Future<String> search(String keyword) =>
       _get('$site/search/video/${Uri.encodeComponent(keyword)}/');
 

@@ -196,6 +196,32 @@ void main() {
     );
   });
 
+  test('falls back to HEVC URL when the standard URL is empty', () {
+    const html = r'''
+      <script id="videoInitialData" type="application/json">
+        {"videoSrc":"","videoSrcHevc":"https://cdn.example/hevc.m3u8"}
+      </script>
+    ''';
+
+    expect(parser.parsePlayUrl(html), 'https://cdn.example/hevc.m3u8');
+  });
+
+  test('parses the runtime source URL when embedded URLs are empty', () {
+    const html = '''
+      <script id="videoInitialData" type="application/json">
+        {"epPlaySrcs":{},"videoSrc":""}
+      </script>
+      <video>
+        <source src="https://yd.example/video.m3u8?auth_key=abc">
+      </video>
+    ''';
+
+    expect(
+      parser.parsePlayUrl(html),
+      'https://yd.example/video.m3u8?auth_key=abc',
+    );
+  });
+
   test('parses cover from video detail pages', () {
     const html = '''
       <div class="hg-web-detail">
