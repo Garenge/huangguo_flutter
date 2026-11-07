@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart' show Share, XFile;
 import '../models/drama.dart';
 import '../models/download_task.dart';
 import '../services/album_update_checker.dart';
@@ -563,11 +562,14 @@ class _DownloadPageState extends State<DownloadPage>
     final watched =
         LibraryScope.maybeOf(context)?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
         false;
-    return Container(
+    return Material(
       color: Colors.grey[900],
-      padding: const EdgeInsets.only(left: 12),
       child: ListTile(
         dense: true,
+        onTap: () => _playLocalFile(task),
+        contentPadding: const EdgeInsets.only(left: 16, right: 4),
+        minLeadingWidth: 20,
+        horizontalTitleGap: 8,
         subtitle: watched ? const Text('看过', style: TextStyle(color: Colors.white38)) : null,
         leading: Icon(
           hasMp4 ? Icons.video_file : Icons.play_circle_outline,
@@ -591,37 +593,57 @@ class _DownloadPageState extends State<DownloadPage>
             ),
           ],
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              color: Colors.orange,
-              onPressed: () => _playLocalFile(task),
-            ),
-            IconButton(
-              icon: Icon(hasMp4 ? Icons.video_file : Icons.folder_open, size: 19),
-              color: Colors.blueGrey,
-              tooltip: hasMp4
-                  ? (_isMobile ? '分享 MP4' : '定位 MP4')
-                  : (_isMobile ? '分享原始文件' : '查看文件夹'),
-              onPressed: () => _openTaskResource(task),
-            ),
-            if (!hasMp4)
-              IconButton(
-                icon: const Icon(Icons.transform_rounded, size: 18),
-                color: Colors.blueGrey,
-                tooltip: '转换为 MP4',
-                onPressed: () => _exportAndShare(task),
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              color: Colors.grey,
-              onPressed: () => _confirmDeleteCompleted(task),
-            ),
-          ],
-        ),
+        trailing: _buildCompletedTaskActions(task, hasMp4),
       ),
+    );
+  }
+
+  Widget _buildCompletedTaskActions(DownloadTask task, bool hasMp4) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _completedActionButton(
+          icon: Icons.play_arrow_rounded,
+          tooltip: '播放',
+          color: Colors.orange,
+          onPressed: () => _playLocalFile(task),
+        ),
+        _completedActionButton(
+          icon: _isMobile ? Icons.share_rounded : Icons.folder_open,
+          tooltip: hasMp4
+              ? (_isMobile ? '分享 MP4' : '定位 MP4')
+              : (_isMobile ? '分享原始资源 ZIP' : '查看文件夹'),
+          onPressed: () => _openTaskResource(task),
+        ),
+        if (!hasMp4)
+          _completedActionButton(
+            icon: Icons.transform_rounded,
+            tooltip: '转换为 MP4',
+            onPressed: () => _exportAndShare(task),
+          ),
+        _completedActionButton(
+          icon: Icons.delete_outline,
+          tooltip: '删除文件',
+          color: Colors.grey,
+          onPressed: () => _confirmDeleteCompleted(task),
+        ),
+      ],
+    );
+  }
+
+  Widget _completedActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    Color color = Colors.blueGrey,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 20),
+      tooltip: tooltip,
+      color: color,
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+      visualDensity: VisualDensity.standard,
+      onPressed: onPressed,
     );
   }
 
@@ -708,9 +730,11 @@ class _DownloadPageState extends State<DownloadPage>
       }
       if (!mounted) return;
       try {
-        await Share.shareXFiles([
-          XFile(result.outputPath!),
-        ], sharePositionOrigin: shareOriginFor(context));
+        await DownloadFileService.openOrShareFile(
+          filePath: result.outputPath!,
+          shareTitle: '${task.dramaName} - ${task.episodeName}.mp4',
+          sharePositionOrigin: shareOriginFor(context),
+        );
       } catch (e) {
         _showSnack('分享失败: $e');
       }
@@ -802,7 +826,9 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   Future<void> _openMp4(DownloadTask task) async {
-    final mp4Path = task.mp4Path;
+    final mp4Path = task.mp4Path != null && File(task.mp4Path!).existsSync()
+        ? task.mp4Path
+        : task.filePath;
     if (mp4Path == null || mp4Path.isEmpty) {
       _showSnack('MP4 文件路径不存在');
       return;

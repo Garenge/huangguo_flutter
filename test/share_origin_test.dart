@@ -23,6 +23,25 @@ void main() {
     );
   });
 
+  testWidgets('share origin stays inside iPad full and split windows', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in [
+      const Size(1024, 1366),
+      const Size(1366, 1024),
+      const Size(375, 1024),
+    ]) {
+      tester.view.physicalSize = size * 2;
+      final origin = await _readOrigin(tester);
+      expect(origin.center, size.center(Offset.zero));
+      expect((Offset.zero & size).contains(origin.topLeft), isTrue);
+      expect((Offset.zero & size).contains(origin.bottomRight), isTrue);
+    }
+  });
+
   testWidgets('share origin follows rotation instead of caching old bounds', (
     tester,
   ) async {

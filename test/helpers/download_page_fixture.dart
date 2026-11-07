@@ -98,7 +98,7 @@ Future<TestDownloadService> mountDownloads(
   await tester.pumpWidget(
     library == null ? content : LibraryScope(library: library, child: content),
   );
-  await tester.tap(find.text('已完成 (${service.completedTasks.length})'));
+  await tester.tap(find.textContaining('已完成 ('));
   await tester.pumpAndSettle();
   return service;
 }

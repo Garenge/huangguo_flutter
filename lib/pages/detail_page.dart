@@ -163,8 +163,12 @@ class _DetailPageState extends State<DetailPage> {
     final task = await widget.downloadService.addTask(widget.drama, episode);
     if (task == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('该剧集已在下载队列中'),
+        SnackBar(
+          content: Text(
+            widget.downloadService.isResourceDownloaded(widget.drama, episode)
+                ? '该剧集已下载，无需重复下载'
+                : '该剧集已有下载任务',
+          ),
           backgroundColor: Colors.grey,
         ),
       );

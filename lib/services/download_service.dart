@@ -23,8 +23,9 @@ const _metaFileName = '.download_tasks.json';
 class DownloadBatchResult {
   final int addedCount;
   final int skippedCount;
+  final int retriedCount;
 
-  const DownloadBatchResult({required this.addedCount, required this.skippedCount});
+  const DownloadBatchResult({required this.addedCount, required this.skippedCount, this.retriedCount = 0});
 }
 
 /// HLS 加密密钥信息
@@ -93,12 +94,39 @@ class DownloadService extends ChangeNotifier {
   }
 
   bool isEpisodeDownloaded(String dramaId, String ep) {
-    final task = taskForEpisode(dramaId, ep);
-    return task?.status == DownloadStatus.completed && task != null && _hasEpisodeResource(task);
+    return _tasks.any(
+      (task) =>
+          task.dramaId == dramaId &&
+          task.ep == ep &&
+          isEpisodeDownloadedForTask(task),
+    );
   }
 
   bool isEpisodeDownloadedForTask(DownloadTask task) {
-    return task.status == DownloadStatus.completed && _hasEpisodeResource(task);
+    return task.status == DownloadStatus.completed &&
+            _hasEpisodeResource(task) ||
+        task.status == DownloadStatus.failed && _hasPlayableResource(task);
+  }
+
+  bool isResourceDownloaded(Drama drama, Episode episode) {
+    return isEpisodeDownloaded(drama.id, episode.ep) ||
+        _directoryHasPlayableResource(
+          _episodeDir(drama.name, drama.id, episode.name),
+        );
+  }
+
+  bool _hasPlayableResource(DownloadTask task) {
+    return _fileExists(task.mp4Path) ||
+        _directoryHasPlayableResource(episodeDirectoryFor(task));
+  }
+
+  bool _directoryHasPlayableResource(String path) {
+    final directory = Directory(path);
+    if (!directory.existsSync()) return false;
+    return directory.listSync(followLinks: false).whereType<File>().any((file) {
+      final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
+      return name == 'playlist.m3u8' || name.endsWith('.mp4');
+    });
   }
 
   bool _hasEpisodeResource(DownloadTask task) {
@@ -166,10 +194,18 @@ class DownloadService extends ChangeNotifier {
   Future<DownloadTask?> addTask(Drama drama, Episode episode) async {
     await _ensureInit();
 
-    final exists = _taskExists(drama.id, episode.ep);
+    final exists =
+        _taskExists(drama.id, episode.ep) ||
+        isResourceDownloaded(drama, episode);
     if (exists) {
       _log.w('addTask: already exists, dramaId=${drama.id}, ep=${episode.ep}');
       return null;
+    }
+
+    final failedTask = _failedTaskForEpisode(drama.id, episode.ep);
+    if (failedTask != null) {
+      await resumeTask(failedTask.id);
+      return failedTask;
     }
 
     final taskId = '${drama.id}_${episode.ep}_${DateTime.now().millisecondsSinceEpoch}';
@@ -198,14 +234,22 @@ class DownloadService extends ChangeNotifier {
     await _ensureInit();
 
     final newTasks = <DownloadTask>[];
+    final retryTasks = <DownloadTask>[];
     final seenEpisodes = <String>{};
     var skippedCount = 0;
     for (final episode in episodes) {
-      if (!_isNewEpisode(drama.id, episode.ep, seenEpisodes)) {
+      if (!_isNewEpisode(drama, episode, seenEpisodes)) {
         skippedCount++;
         continue;
       }
       seenEpisodes.add(episode.ep);
+
+      final failedTask = _failedTaskForEpisode(drama.id, episode.ep);
+      if (failedTask != null) {
+        _prepareRetry(failedTask);
+        retryTasks.add(failedTask);
+        continue;
+      }
 
       final taskId = '${drama.id}_${episode.ep}_${DateTime.now().microsecondsSinceEpoch}';
       newTasks.add(
@@ -221,22 +265,23 @@ class DownloadService extends ChangeNotifier {
       );
     }
 
-    if (newTasks.isEmpty) {
+    if (newTasks.isEmpty && retryTasks.isEmpty) {
       _log.i('addTasks: no new tasks, dramaId=${drama.id}, skipped=$skippedCount');
       return DownloadBatchResult(addedCount: 0, skippedCount: skippedCount);
     }
 
     _tasks.insertAll(0, newTasks);
     _pendingQueue.addAll(newTasks);
+    _pendingQueue.addAll(retryTasks);
     _log.i(
-      'addTasks: added=${newTasks.length}, skipped=$skippedCount, '
+      'addTasks: added=${newTasks.length}, retried=${retryTasks.length}, skipped=$skippedCount, '
       'dramaId=${drama.id}',
     );
     notifyListeners();
     await _persist();
     _processQueue();
 
-    return DownloadBatchResult(addedCount: newTasks.length, skippedCount: skippedCount);
+    return DownloadBatchResult(addedCount: newTasks.length, skippedCount: skippedCount, retriedCount: retryTasks.length);
   }
 
   Future<void> updateMp4Path(String taskId, String path) async {
@@ -301,15 +346,25 @@ class DownloadService extends ChangeNotifier {
   Future<void> resumeTask(String taskId) async {
     final task = _findTask(taskId);
     if (task == null) return;
-    if (task.status == DownloadStatus.paused || task.status == DownloadStatus.failed) {
-      task.status = DownloadStatus.pending;
-      task.errorMessage = null;
+    if (task.status == DownloadStatus.paused ||
+        task.status == DownloadStatus.failed ||
+        (task.status == DownloadStatus.completed &&
+            !isEpisodeDownloadedForTask(task))) {
+      _prepareRetry(task);
       _log.i('resumeTask: $taskId');
       notifyListeners();
       await _persist();
       _pendingQueue.add(task);
       _processQueue();
     }
+  }
+
+  void _prepareRetry(DownloadTask task) {
+    task.status = DownloadStatus.pending;
+    task.errorMessage = null;
+    task.progress = 0;
+    task.downloadedBytes = 0;
+    task.totalBytes = 0;
   }
 
   Future<void> deleteTask(String taskId) async {
@@ -391,12 +446,25 @@ class DownloadService extends ChangeNotifier {
           t.ep == ep &&
           (t.status == DownloadStatus.pending ||
               t.status == DownloadStatus.downloading ||
+              t.status == DownloadStatus.paused ||
+              isEpisodeDownloadedForTask(t) ||
               t.status == DownloadStatus.completed),
     );
   }
 
-  bool _isNewEpisode(String dramaId, String ep, Set<String> seenEpisodes) {
-    return !seenEpisodes.contains(ep) && !_taskExists(dramaId, ep);
+  DownloadTask? _failedTaskForEpisode(String dramaId, String ep) {
+    for (final task in _tasks) {
+      if (task.dramaId == dramaId && task.ep == ep && task.status == DownloadStatus.failed) {
+        return task;
+      }
+    }
+    return null;
+  }
+
+  bool _isNewEpisode(Drama drama, Episode episode, Set<String> seenEpisodes) {
+    return !seenEpisodes.contains(episode.ep) &&
+        !_taskExists(drama.id, episode.ep) &&
+        !isResourceDownloaded(drama, episode);
   }
 
   // ---------- 队列处理 ----------
@@ -776,7 +844,8 @@ class DownloadService extends ChangeNotifier {
           downloadRoot: _downloadRoot!,
         );
         if (task.status == DownloadStatus.completed && task.filePath != null) {
-          if (!await File(task.filePath!).exists()) {
+          if (!await File(task.filePath!).exists() &&
+              !_hasPlayableResource(task)) {
             task.status = DownloadStatus.failed;
             task.errorMessage = '文件已丢失';
           }

@@ -26,9 +26,10 @@ class DownloadFileService {
     if (isMobile) {
       final zipPath = await _createRawResourceZip(folder, shareTitle);
       _log.i('openOrShareFolder: sharing zip=$zipPath');
-      await Share.shareXFiles(
-        [XFile(zipPath)],
-        text: shareTitle,
+      await shareFile(
+        filePath: zipPath,
+        fileName: '$shareTitle.zip',
+        mimeType: 'application/zip',
         sharePositionOrigin: sharePositionOrigin,
       );
       return;
@@ -49,15 +50,43 @@ class DownloadFileService {
 
     if (isMobile) {
       _log.i('openOrShareFile: sharing file=$filePath');
-      await Share.shareXFiles(
-        [XFile(filePath)],
-        text: shareTitle,
+      await shareFile(
+        filePath: filePath,
+        fileName: shareTitle,
+        mimeType: 'video/mp4',
         sharePositionOrigin: sharePositionOrigin,
       );
       return;
     }
 
     await _revealFile(file.path);
+  }
+
+  /// 只分享文件；已有路径的文件名需通过实际路径设置，不能仅覆盖 XFile.name。
+  static Future<void> shareFile({
+    required String filePath,
+    required String fileName,
+    required String mimeType,
+    required Rect sharePositionOrigin,
+  }) async {
+    final sharedFile = await _prepareShareFile(filePath, fileName);
+    await Share.shareXFiles([
+      XFile(sharedFile.path, mimeType: mimeType),
+    ], sharePositionOrigin: sharePositionOrigin);
+  }
+
+  static Future<File> _prepareShareFile(
+    String filePath,
+    String fileName,
+  ) async {
+    final safeName = fileName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+    final file = File(filePath);
+    if (file.uri.pathSegments.last == safeName) return file;
+    final tempDir = await getTemporaryDirectory();
+    final shareDir = await tempDir.createTemp('download_share_');
+    return file.copy(
+      '${shareDir.path}/${safeName.isEmpty ? file.uri.pathSegments.last : safeName}',
+    );
   }
 
   static Future<String> _createRawResourceZip(
