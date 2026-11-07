@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../models/download_task.dart';
 import 'app_log.dart';
+import 'conversion_size_logger.dart';
 import 'download_service.dart';
 import 'export_service.dart';
 
@@ -28,6 +29,7 @@ class VideoConversionService {
   Future<ExportResult> exportTask(DownloadTask task) async {
     final existingMp4Path = await _existingMp4Path(task);
     if (existingMp4Path != null) {
+      await _logReused(task, existingMp4Path);
       await _downloadService.updateMp4Path(task.id, existingMp4Path);
       return ExportResult(success: true, outputPath: existingMp4Path);
     }
@@ -50,6 +52,7 @@ class VideoConversionService {
         : expectedOutputPath;
 
     if (await File(outputPath).exists()) {
+      await _logReused(task, outputPath);
       await _downloadService.updateMp4Path(task.id, outputPath);
       return ExportResult(success: true, outputPath: outputPath);
     }
@@ -57,6 +60,7 @@ class VideoConversionService {
     final result = await ExportService.export(
       m3u8Dir: m3u8Dir,
       outputPath: outputPath,
+      resourceLabel: '${task.dramaName} / ${task.episodeName}',
     );
     if (result.success && result.outputPath != null) {
       await _downloadService.updateMp4Path(task.id, result.outputPath!);
@@ -80,6 +84,7 @@ class VideoConversionService {
       try {
         final existingMp4Path = await _existingMp4Path(task);
         if (existingMp4Path != null) {
+          await _logReused(task, existingMp4Path);
           await _downloadService.updateMp4Path(task.id, existingMp4Path);
           skippedCount++;
           onProgress?.call(
@@ -158,6 +163,12 @@ class VideoConversionService {
       episodeName: task.episodeName,
     );
   }
+
+  Future<void> _logReused(DownloadTask task, String mp4Path) =>
+      ConversionSizeLogger.logReused(
+        label: '${task.dramaName} / ${task.episodeName}',
+        outputPath: mp4Path,
+      );
 
   List<DownloadTask> sortTasks(List<DownloadTask> tasks) {
     final sorted = [...tasks];

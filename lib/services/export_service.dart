@@ -5,6 +5,7 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app_log.dart';
+import 'conversion_size_logger.dart';
 
 const _log = AppLog('ExportService');
 
@@ -52,17 +53,24 @@ class ExportService {
   static Future<ExportResult> export({
     required String m3u8Dir,
     required String outputPath,
+    String? resourceLabel,
   }) async {
     // 1. 检查 m3u8 源文件
     final m3u8Path = '$m3u8Dir/playlist.m3u8';
     final m3u8File = File(m3u8Path);
     if (!await m3u8File.exists()) {
-      _log.e('export: playlist.m3u8 not found at $m3u8Dir');
+      _log.e('export_service.dart::export: playlist.m3u8 不存在 path=$m3u8Dir');
       return ExportResult(success: false, error: '源文件不存在');
     }
 
     // 2. 确保输出目录
     await File(outputPath).parent.create(recursive: true);
+    final sizeLogger = ConversionSizeLogger(
+      label: resourceLabel ?? File(outputPath).uri.pathSegments.last,
+      playlistPath: m3u8Path,
+      outputPath: outputPath,
+    );
+    await sizeLogger.logBefore();
 
     // 3. 执行 ffmpeg（使用绝对路径，ffmpeg 从 m3u8 位置解析相对引用）
     final cmd =
@@ -75,8 +83,7 @@ class ExportService {
       if (ReturnCode.isSuccess(rc)) {
         final outFile = File(outputPath);
         if (await outFile.exists()) {
-          final size = await outFile.length();
-          _log.i('export: success, output=$outputPath, size=$size');
+          await sizeLogger.logAfter();
           return ExportResult(success: true, outputPath: outputPath);
         }
         return ExportResult(success: false, error: '输出文件未生成');
