@@ -24,10 +24,7 @@ class DownloadBatchResult {
   final int addedCount;
   final int skippedCount;
 
-  const DownloadBatchResult({
-    required this.addedCount,
-    required this.skippedCount,
-  });
+  const DownloadBatchResult({required this.addedCount, required this.skippedCount});
 }
 
 /// HLS 加密密钥信息
@@ -44,11 +41,7 @@ class _TsSegmentInfo {
   final String url;
   final double duration; // 秒，来自 #EXTINF
   final _HlsKeyInfo? keyInfo; // 当前分片的加密密钥
-  const _TsSegmentInfo({
-    required this.url,
-    required this.duration,
-    this.keyInfo,
-  });
+  const _TsSegmentInfo({required this.url, required this.duration, this.keyInfo});
 }
 
 /// 下载引擎：m3u8 解析 + TS 分片下载 + 下载密钥 + 生成本地 m3u8 播放列表
@@ -89,11 +82,7 @@ class DownloadService extends ChangeNotifier {
       if (isEpisodeDownloadedForTask(task)) task.dramaId,
   };
   List<DownloadTask> get pendingTasks => _tasks
-      .where(
-        (t) =>
-            t.status == DownloadStatus.pending ||
-            t.status == DownloadStatus.paused,
-      )
+      .where((t) => t.status == DownloadStatus.pending || t.status == DownloadStatus.paused)
       .toList();
 
   DownloadTask? taskForEpisode(String dramaId, String ep) {
@@ -105,9 +94,7 @@ class DownloadService extends ChangeNotifier {
 
   bool isEpisodeDownloaded(String dramaId, String ep) {
     final task = taskForEpisode(dramaId, ep);
-    return task?.status == DownloadStatus.completed &&
-        task != null &&
-        _hasEpisodeResource(task);
+    return task?.status == DownloadStatus.completed && task != null && _hasEpisodeResource(task);
   }
 
   bool isEpisodeDownloadedForTask(DownloadTask task) {
@@ -120,15 +107,12 @@ class DownloadService extends ChangeNotifier {
     final episodeDirectory = Directory(episodeDirectoryFor(task));
     if (!episodeDirectory.existsSync()) return false;
 
-    return episodeDirectory
-        .listSync(recursive: true, followLinks: false)
-        .whereType<File>()
-        .any((file) {
-          final fileName = file.path.toLowerCase();
-          return fileName.endsWith('.mp4') ||
-              fileName.endsWith('.m3u8') ||
-              fileName.endsWith('.ts');
-        });
+    return episodeDirectory.listSync(recursive: true, followLinks: false).whereType<File>().any((
+      file,
+    ) {
+      final fileName = file.path.toLowerCase();
+      return fileName.endsWith('.mp4') || fileName.endsWith('.m3u8') || fileName.endsWith('.ts');
+    });
   }
 
   bool _fileExists(String? path) {
@@ -167,9 +151,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   String _episodeDir(String dramaName, String dramaId, String episodeName) {
-    final safeEpName = episodeName
-        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
-        .trim();
+    final safeEpName = episodeName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
     return '${_dramaDir(dramaName, dramaId)}/$safeEpName';
   }
 
@@ -190,8 +172,7 @@ class DownloadService extends ChangeNotifier {
       return null;
     }
 
-    final taskId =
-        '${drama.id}_${episode.ep}_${DateTime.now().millisecondsSinceEpoch}';
+    final taskId = '${drama.id}_${episode.ep}_${DateTime.now().millisecondsSinceEpoch}';
     final task = DownloadTask(
       id: taskId,
       dramaId: drama.id,
@@ -213,10 +194,7 @@ class DownloadService extends ChangeNotifier {
     return task;
   }
 
-  Future<DownloadBatchResult> addTasks(
-    Drama drama,
-    List<Episode> episodes,
-  ) async {
+  Future<DownloadBatchResult> addTasks(Drama drama, List<Episode> episodes) async {
     await _ensureInit();
 
     final newTasks = <DownloadTask>[];
@@ -229,8 +207,7 @@ class DownloadService extends ChangeNotifier {
       }
       seenEpisodes.add(episode.ep);
 
-      final taskId =
-          '${drama.id}_${episode.ep}_${DateTime.now().microsecondsSinceEpoch}';
+      final taskId = '${drama.id}_${episode.ep}_${DateTime.now().microsecondsSinceEpoch}';
       newTasks.add(
         DownloadTask(
           id: taskId,
@@ -245,9 +222,7 @@ class DownloadService extends ChangeNotifier {
     }
 
     if (newTasks.isEmpty) {
-      _log.i(
-        'addTasks: no new tasks, dramaId=${drama.id}, skipped=$skippedCount',
-      );
+      _log.i('addTasks: no new tasks, dramaId=${drama.id}, skipped=$skippedCount');
       return DownloadBatchResult(addedCount: 0, skippedCount: skippedCount);
     }
 
@@ -261,10 +236,7 @@ class DownloadService extends ChangeNotifier {
     await _persist();
     _processQueue();
 
-    return DownloadBatchResult(
-      addedCount: newTasks.length,
-      skippedCount: skippedCount,
-    );
+    return DownloadBatchResult(addedCount: newTasks.length, skippedCount: skippedCount);
   }
 
   Future<void> updateMp4Path(String taskId, String path) async {
@@ -329,8 +301,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> resumeTask(String taskId) async {
     final task = _findTask(taskId);
     if (task == null) return;
-    if (task.status == DownloadStatus.paused ||
-        task.status == DownloadStatus.failed) {
+    if (task.status == DownloadStatus.paused || task.status == DownloadStatus.failed) {
       task.status = DownloadStatus.pending;
       task.errorMessage = null;
       _log.i('resumeTask: $taskId');
@@ -355,9 +326,7 @@ class DownloadService extends ChangeNotifier {
     }
 
     if (task.filePath != null) {
-      final epDir = Directory(
-        _episodeDir(task.dramaName, task.dramaId, task.episodeName),
-      );
+      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
       if (await epDir.exists()) {
         await epDir.delete(recursive: true);
       }
@@ -376,15 +345,32 @@ class DownloadService extends ChangeNotifier {
     final task = _findTask(taskId);
     if (task == null || task.status != DownloadStatus.completed) return;
 
-    final epDir = Directory(
-      _episodeDir(task.dramaName, task.dramaId, task.episodeName),
-    );
+    final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
     if (await epDir.exists()) {
       await epDir.delete(recursive: true);
     }
 
     _tasks.remove(task);
     _log.i('deleteCompletedFile: $taskId');
+    notifyListeners();
+    await _persist();
+    _cleanupEmptyDirs();
+  }
+
+  Future<void> deleteCompletedFiles(Iterable<String> taskIds) async {
+    final ids = taskIds.toSet();
+    final tasks = _tasks
+        .where((task) => ids.contains(task.id))
+        .where((task) => task.status == DownloadStatus.completed)
+        .toList();
+    if (tasks.isEmpty) return;
+
+    for (final task in tasks) {
+      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
+      if (await epDir.exists()) await epDir.delete(recursive: true);
+    }
+    _tasks.removeWhere((task) => tasks.contains(task));
+    _log.i('deleteCompletedFiles: deleted=${tasks.length}');
     notifyListeners();
     await _persist();
     _cleanupEmptyDirs();
@@ -473,9 +459,7 @@ class DownloadService extends ChangeNotifier {
       }
       await tmpDir.create(recursive: true);
 
-      final epDir = Directory(
-        _episodeDir(task.dramaName, task.dramaId, task.episodeName),
-      );
+      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
       if (await epDir.exists()) {
         await epDir.delete(recursive: true);
       }
@@ -530,11 +514,7 @@ class DownloadService extends ChangeNotifier {
       _log.i('_downloadTask: moved ${tsFiles.length} TS segments to $epDir');
 
       // 7. 生成本地 m3u8 播放列表（含密钥引用）
-      final m3u8Path = _episodePath(
-        task.dramaName,
-        task.dramaId,
-        task.episodeName,
-      );
+      final m3u8Path = _episodePath(task.dramaName, task.dramaId, task.episodeName);
       final m3u8Content = _buildLocalM3u8(segments, downloadedKeys);
       await File(m3u8Path).writeAsString(m3u8Content);
       _log.i('_downloadTask: m3u8 written to $m3u8Path');
@@ -598,9 +578,7 @@ class DownloadService extends ChangeNotifier {
 
     if (content.contains('#EXT-X-STREAM-INF')) {
       _log.d('_resolveM3u8: master playlist detected');
-      final variantMatch = RegExp(
-        r'#EXT-X-STREAM-INF[^\n]*\n([^\n#]+)',
-      ).firstMatch(content);
+      final variantMatch = RegExp(r'#EXT-X-STREAM-INF[^\n]*\n([^\n#]+)').firstMatch(content);
       if (variantMatch != null) {
         final variantUrl = _resolveUrl(m3u8Url, variantMatch.group(1)!.trim());
         _log.d('_resolveM3u8: variant=$variantUrl');
@@ -628,22 +606,14 @@ class DownloadService extends ChangeNotifier {
 
       if (trimmed.startsWith('#EXT-X-KEY:')) {
         currentKey = _parseKeyTag(trimmed);
-        _log.d(
-          '_parseMediaPlaylist: key method=${currentKey?.method}, uri=${currentKey?.uri}',
-        );
+        _log.d('_parseMediaPlaylist: key method=${currentKey?.method}, uri=${currentKey?.uri}');
       } else if (trimmed.startsWith('#EXTINF:')) {
         // 格式: #EXTINF:<duration>,<title>
         final durationStr = trimmed.substring(8).split(',').first;
         currentDuration = double.tryParse(durationStr) ?? 0;
       } else if (!trimmed.startsWith('#')) {
         final url = _resolveUrl(baseUrl, trimmed);
-        segments.add(
-          _TsSegmentInfo(
-            url: url,
-            duration: currentDuration,
-            keyInfo: currentKey,
-          ),
-        );
+        segments.add(_TsSegmentInfo(url: url, duration: currentDuration, keyInfo: currentKey));
         currentDuration = 0;
       }
     }
@@ -677,10 +647,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 生成本地 m3u8 播放列表，引用本地 TS 文件和密钥
-  String _buildLocalM3u8(
-    List<_TsSegmentInfo> segments,
-    Map<String, String> downloadedKeys,
-  ) {
+  String _buildLocalM3u8(List<_TsSegmentInfo> segments, Map<String, String> downloadedKeys) {
     final buf = StringBuffer();
     buf.writeln('#EXTM3U');
     buf.writeln('#EXT-X-VERSION:3');
@@ -706,9 +673,7 @@ class DownloadService extends ChangeNotifier {
         final keyUri = s.keyInfo!.uri!;
         if (keyUri != lastKeyUri) {
           final localKeyName = downloadedKeys[keyUri] ?? 'key_0.bin';
-          buf.write(
-            '#EXT-X-KEY:METHOD=${s.keyInfo!.method},URI="$localKeyName"',
-          );
+          buf.write('#EXT-X-KEY:METHOD=${s.keyInfo!.method},URI="$localKeyName"');
           if (s.keyInfo!.iv != null) {
             buf.write(',IV=${s.keyInfo!.iv}');
           }
@@ -739,9 +704,7 @@ class DownloadService extends ChangeNotifier {
       return '${baseUri.origin}$segmentUrl';
     }
     final basePath = baseUri.pathSegments.isNotEmpty
-        ? baseUri.pathSegments
-              .sublist(0, baseUri.pathSegments.length - 1)
-              .join('/')
+        ? baseUri.pathSegments.sublist(0, baseUri.pathSegments.length - 1).join('/')
         : '';
     return '${baseUri.origin}/$basePath/$segmentUrl';
   }
@@ -757,11 +720,7 @@ class DownloadService extends ChangeNotifier {
     int retries = 3;
     while (retries > 0) {
       try {
-        await _downloadDio.download(
-          url,
-          savePath,
-          options: Options(headers: headers),
-        );
+        await _downloadDio.download(url, savePath, options: Options(headers: headers));
         final file = File(savePath);
         if (await file.exists()) {
           task.downloadedBytes += await file.length();
@@ -798,9 +757,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> _persist() async {
     if (_downloadRoot == null) return;
     final metaFile = File('$_downloadRoot/$_metaFileName');
-    final json = _tasks
-        .map((t) => t.toJson(downloadRoot: _downloadRoot!))
-        .toList();
+    final json = _tasks.map((t) => t.toJson(downloadRoot: _downloadRoot!)).toList();
     await metaFile.writeAsString(jsonEncode(json));
   }
 

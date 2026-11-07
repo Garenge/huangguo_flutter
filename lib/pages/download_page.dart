@@ -18,9 +18,12 @@ import '../widgets/download_task_tile.dart';
 import '../widgets/local_download_player.dart';
 import '../widgets/library_scope.dart';
 import '../widgets/share_origin.dart';
+import '../widgets/app_notice.dart';
 
 const _log = AppLog('DownloadPage');
 const _automaticCheckInterval = Duration(minutes: 30);
+
+enum _AlbumAction { check, detail, favorite, delete }
 
 /// 下载管理页
 class DownloadPage extends StatefulWidget {
@@ -61,8 +64,7 @@ class _DownloadPageState extends State<DownloadPage>
   final Map<String, int> _conversionCompleted = {};
   final Set<String> _collapsedAlbums = {};
   final ScrollController _completedScrollController = ScrollController();
-  final TextEditingController _completedSearchController =
-      TextEditingController();
+  final TextEditingController _completedSearchController = TextEditingController();
   late final DownloadSettingsService _downloadSettings;
   DownloadSortMode _completedSortMode = DownloadSortMode.recent;
   bool _sortModeSelected = false;
@@ -88,15 +90,9 @@ class _DownloadPageState extends State<DownloadPage>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
     _conversionService = VideoConversionService(widget.downloadService);
-    _updateChecker = AlbumUpdateChecker(
-      api: widget.api,
-      parser: widget.htmlParser,
-    );
+    _updateChecker = AlbumUpdateChecker(api: widget.api, parser: widget.htmlParser);
     WidgetsBinding.instance.addObserver(this);
-    _automaticCheckTimer = Timer.periodic(
-      _automaticCheckInterval,
-      (_) => _runAutomaticCheck(),
-    );
+    _automaticCheckTimer = Timer.periodic(_automaticCheckInterval, (_) => _runAutomaticCheck());
     widget.downloadService.addListener(_onServiceChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_runAutomaticCheck());
@@ -154,8 +150,7 @@ class _DownloadPageState extends State<DownloadPage>
         title: const Text('下载管理'),
         backgroundColor: const Color(0xFF0D0D0D),
         actions: [
-          if (_tabController.index == 1 && _ds.completedTasks.isNotEmpty)
-            _buildAlbumToggleButton(),
+          if (_tabController.index == 1 && _ds.completedTasks.isNotEmpty) _buildAlbumToggleButton(),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -163,11 +158,8 @@ class _DownloadPageState extends State<DownloadPage>
           labelColor: Colors.orange,
           unselectedLabelColor: Colors.grey,
           tabs: [
-            Tab(
-              text:
-                  '下载中 (${_ds.downloadingTasks.length + _ds.pendingTasks.length})',
-            ),
-            Tab(text: '已完成 (${_ds.completedTasks.length})'),
+            Tab(text: '下载中 (${_ds.downloadingTasks.length + _ds.pendingTasks.length})'),
+            Tab(text: '已完成 (${_completedAlbums().length} 套)'),
           ],
         ),
       ),
@@ -183,9 +175,7 @@ class _DownloadPageState extends State<DownloadPage>
     final allCollapsed = albumKeys.every(_collapsedAlbums.contains);
     return TextButton.icon(
       onPressed: () => _toggleAllAlbums(albumKeys, allCollapsed),
-      icon: Icon(
-        allCollapsed ? Icons.unfold_more_rounded : Icons.unfold_less_rounded,
-      ),
+      icon: Icon(allCollapsed ? Icons.unfold_more_rounded : Icons.unfold_less_rounded),
       label: Text(allCollapsed ? '全部展开' : '全部折叠'),
       style: TextButton.styleFrom(foregroundColor: Colors.orange),
     );
@@ -215,15 +205,9 @@ class _DownloadPageState extends State<DownloadPage>
           children: [
             Icon(Icons.download_outlined, size: 64, color: Colors.grey[700]),
             const SizedBox(height: 16),
-            Text(
-              '暂无下载任务',
-              style: TextStyle(color: Colors.grey[500], fontSize: 16),
-            ),
+            Text('暂无下载任务', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
             const SizedBox(height: 4),
-            Text(
-              '在详情页点击剧集旁的下载按钮',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            ),
+            Text('在详情页点击剧集旁的下载按钮', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
           ],
         ),
       );
@@ -239,29 +223,21 @@ class _DownloadPageState extends State<DownloadPage>
           onPause: () => _ds.pauseTask(task.id),
           onResume: () => _ds.resumeTask(task.id),
           onDelete: () => _confirmDelete(task),
-          onPlay: task.status == DownloadStatus.completed
-              ? () => _playLocalFile(task)
-              : null,
+          onPlay: task.status == DownloadStatus.completed ? () => _playLocalFile(task) : null,
         );
       },
     );
   }
 
   Widget _buildCompletedTab() {
-    final completed = DownloadCatalog.filter(
-      _ds.completedTasks,
-      _completedSearchController.text,
-    );
+    final completed = DownloadCatalog.filter(_ds.completedTasks, _completedSearchController.text);
 
     if (completed.isEmpty) {
       return CustomScrollView(
         controller: _completedScrollController,
         slivers: [
           _buildCompletedToolbar(),
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _buildCompletedEmptyState(),
-          ),
+          SliverFillRemaining(hasScrollBody: false, child: _buildCompletedEmptyState()),
         ],
       );
     }
@@ -303,10 +279,7 @@ class _DownloadPageState extends State<DownloadPage>
               decoration: InputDecoration(
                 hintText: '搜索剧名、剧集或拼音',
                 hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-                prefixIcon: const Icon(
-                  Icons.search_rounded,
-                  color: Colors.grey,
-                ),
+                prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
                 suffixIcon: hasQuery
                     ? IconButton(
                         tooltip: '清除搜索',
@@ -330,9 +303,7 @@ class _DownloadPageState extends State<DownloadPage>
             Row(
               children: [
                 Text(
-                  hasQuery
-                      ? '找到 $resultCount / $totalCount 集'
-                      : '$totalCount 集',
+                  hasQuery ? '找到 $resultCount / $totalCount 集' : '$totalCount 集',
                   style: TextStyle(color: Colors.grey[500], fontSize: 12),
                 ),
                 const Spacer(),
@@ -347,18 +318,11 @@ class _DownloadPageState extends State<DownloadPage>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.sort_rounded,
-                        size: 17,
-                        color: Colors.orange,
-                      ),
+                      const Icon(Icons.sort_rounded, size: 17, color: Colors.orange),
                       const SizedBox(width: 4),
                       Text(
                         _completedSortMode.label,
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: Colors.orange, fontSize: 12),
                       ),
                     ],
                   ),
@@ -412,9 +376,7 @@ class _DownloadPageState extends State<DownloadPage>
   List<Widget> _buildAlbumSlivers(String dramaKey, List<DownloadTask> tasks) {
     final orderedTasks = _conversionService.sortTasks(tasks);
     return [
-      PinnedHeaderSliver(
-        child: _buildAlbumHeaderContent(dramaKey, orderedTasks),
-      ),
+      PinnedHeaderSliver(child: _buildAlbumHeaderContent(dramaKey, orderedTasks)),
       if (!_collapsedAlbums.contains(dramaKey))
         SliverPadding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -472,12 +434,7 @@ class _DownloadPageState extends State<DownloadPage>
                 ),
                 if (orderedTasks.any((task) => !_hasValidMp4(task)))
                   _buildGroupConvertButton(dramaKey, orderedTasks),
-                _buildAlbumUpdateButton(
-                  dramaKey,
-                  orderedTasks,
-                  updateCount,
-                  isChecking,
-                ),
+                _buildAlbumMoreButton(dramaKey, orderedTasks, updateCount, isChecking),
                 Icon(
                   _collapsedAlbums.contains(dramaKey)
                       ? Icons.keyboard_arrow_down
@@ -495,74 +452,123 @@ class _DownloadPageState extends State<DownloadPage>
   String _watchSummary(List<DownloadTask> tasks) {
     final library = LibraryScope.maybeOf(context);
     final count = tasks
-        .where(
-          (task) =>
-              library?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
-              false,
-        )
+        .where((task) => library?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ?? false)
         .length;
     return '看过 $count / 已下载 ${tasks.length} 集';
   }
 
-  Widget _buildAlbumUpdateButton(
+  Widget _buildAlbumMoreButton(
     String dramaKey,
     List<DownloadTask> tasks,
     int updateCount,
     bool isChecking,
   ) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextButton.icon(
-          onPressed: isChecking ? null : () => _checkAlbum(dramaKey, tasks),
-          icon: isChecking
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.sync_rounded, size: 16),
-          label: Text(
-            isChecking ? '检测中' : '检测',
-            style: const TextStyle(fontSize: 12),
-          ),
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.orange,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-          ),
+    return PopupMenuButton<_AlbumAction>(
+      tooltip: '更多',
+      onSelected: (action) => _handleAlbumAction(action, dramaKey, tasks),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: _AlbumAction.check,
+          enabled: !isChecking,
+          child: Text(isChecking ? '检测中' : '检测更新'),
         ),
-        if (updateCount > 0)
-          TextButton.icon(
-            onPressed: isChecking ? null : () => _openAlbumDetail(tasks),
-            icon: const Icon(Icons.system_update_alt_rounded, size: 16),
-            label: Text(
-              '更新 $updateCount',
-              style: const TextStyle(fontSize: 12),
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.lightBlueAccent,
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-            ),
-          ),
+        PopupMenuItem(value: _AlbumAction.detail, child: const Text('查看详情')),
+        PopupMenuItem(
+          value: _AlbumAction.favorite,
+          child: Text(_isAlbumFavorite(tasks) ? '取消收藏' : '收藏'),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _AlbumAction.delete,
+          child: Text('删除整套', style: TextStyle(color: Colors.red)),
+        ),
       ],
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.more_vert_rounded),
+          if (updateCount > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: Colors.lightBlueAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  bool _isAlbumFavorite(List<DownloadTask> tasks) {
+    if (tasks.isEmpty) return false;
+    return LibraryScope.maybeOf(context)?.isFavorite(tasks.first.dramaId) ?? false;
+  }
+
+  void _handleAlbumAction(_AlbumAction action, String dramaKey, List<DownloadTask> tasks) {
+    switch (action) {
+      case _AlbumAction.check:
+        unawaited(_checkAlbum(dramaKey, tasks));
+      case _AlbumAction.detail:
+        _openAlbumDetail(tasks);
+      case _AlbumAction.favorite:
+        _toggleAlbumFavorite(tasks);
+      case _AlbumAction.delete:
+        _confirmDeleteAlbum(tasks);
+    }
+  }
+
+  Future<void> _toggleAlbumFavorite(List<DownloadTask> tasks) async {
+    if (tasks.isEmpty) return;
+    final library = LibraryScope.maybeOf(context);
+    if (library == null) return;
+    final task = tasks.first;
+    final drama = Drama(id: task.dramaId, name: task.dramaName, pic: task.dramaPic, remark: '');
+    await library.toggleFavorite(drama);
+    if (mounted) setState(() {});
+  }
+
+  void _confirmDeleteAlbum(List<DownloadTask> tasks) {
+    if (tasks.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: const Text('删除整套文件', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '确定删除「${tasks.first.dramaName}」的 ${tasks.length} 集已下载文件吗？\n文件将被永久删除。',
+          style: TextStyle(color: Colors.grey[300]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              unawaited(_ds.deleteCompletedFiles(tasks.map((task) => task.id)));
+            },
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCompletedTaskTile(DownloadTask task) {
     final hasMp4 = _hasValidMp4(task);
     final watched =
-        LibraryScope.maybeOf(
-          context,
-        )?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
+        LibraryScope.maybeOf(context)?.hasWatched(task.dramaId, task.dramaName, ep: task.ep) ??
         false;
     return Container(
       color: Colors.grey[900],
       padding: const EdgeInsets.only(left: 12),
       child: ListTile(
         dense: true,
-        subtitle: watched
-            ? const Text('看过', style: TextStyle(color: Colors.white38))
-            : null,
+        subtitle: watched ? const Text('看过', style: TextStyle(color: Colors.white38)) : null,
         leading: Icon(
           hasMp4 ? Icons.video_file : Icons.play_circle_outline,
           color: Colors.green,
@@ -573,10 +579,7 @@ class _DownloadPageState extends State<DownloadPage>
             Expanded(
               child: Text(
                 task.episodeName,
-                style: TextStyle(
-                  color: watched ? Colors.white38 : Colors.white70,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: watched ? Colors.white38 : Colors.white70, fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -597,10 +600,7 @@ class _DownloadPageState extends State<DownloadPage>
               onPressed: () => _playLocalFile(task),
             ),
             IconButton(
-              icon: Icon(
-                hasMp4 ? Icons.video_file : Icons.folder_open,
-                size: 19,
-              ),
+              icon: Icon(hasMp4 ? Icons.video_file : Icons.folder_open, size: 19),
               color: Colors.blueGrey,
               tooltip: hasMp4
                   ? (_isMobile ? '分享 MP4' : '定位 MP4')
@@ -628,18 +628,12 @@ class _DownloadPageState extends State<DownloadPage>
   Widget _buildGroupConvertButton(String dramaKey, List<DownloadTask> tasks) {
     final isConverting = _convertingGroups.contains(dramaKey);
     final completedCount = _conversionCompleted[dramaKey] ?? 0;
-    final label = isConverting
-        ? '转换 $completedCount/${tasks.length}'
-        : '一键转 MP4';
+    final label = isConverting ? '转换 $completedCount/${tasks.length}' : '一键转 MP4';
 
     return TextButton.icon(
       onPressed: isConverting ? null : () => _convertGroup(dramaKey, tasks),
       icon: isConverting
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
           : const Icon(Icons.transform_rounded, size: 16),
       label: Text(label, style: const TextStyle(fontSize: 12)),
       style: TextButton.styleFrom(
@@ -677,11 +671,7 @@ class _DownloadPageState extends State<DownloadPage>
     );
   }
 
-  void _updateConversionProgress(
-    String dramaKey,
-    int completedCount,
-    String status,
-  ) {
+  void _updateConversionProgress(String dramaKey, int completedCount, String status) {
     if (!mounted) return;
     setState(() {
       _conversionCompleted[dramaKey] = completedCount;
@@ -718,10 +708,9 @@ class _DownloadPageState extends State<DownloadPage>
       }
       if (!mounted) return;
       try {
-        await Share.shareXFiles(
-          [XFile(result.outputPath!)],
-          sharePositionOrigin: shareOriginFor(context),
-        );
+        await Share.shareXFiles([
+          XFile(result.outputPath!),
+        ], sharePositionOrigin: shareOriginFor(context));
       } catch (e) {
         _showSnack('分享失败: $e');
       }
@@ -755,10 +744,7 @@ class _DownloadPageState extends State<DownloadPage>
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('保留源文件'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('保留源文件')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除源文件', style: TextStyle(color: Colors.red)),
@@ -774,11 +760,7 @@ class _DownloadPageState extends State<DownloadPage>
       await _ds.deleteSourceFiles(task.id);
       _showSnack('源文件已删除，已保留 MP4');
     } catch (e, stack) {
-      _log.e(
-        '_deleteSourceFiles: failed episode=${task.episodeName}',
-        e,
-        stack,
-      );
+      _log.e('_deleteSourceFiles: failed episode=${task.episodeName}', e, stack);
       _showSnack('删除源文件失败：$e');
     }
   }
@@ -840,9 +822,7 @@ class _DownloadPageState extends State<DownloadPage>
 
   void _showSnack(String msg) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-      );
+      showAppNotice(context, msg);
     }
   }
 
@@ -882,7 +862,7 @@ class _DownloadPageState extends State<DownloadPage>
           automatic &&
           result.hasUpdates &&
           (previousCount == null || result.newEpisodes.length > previousCount);
-      if (!automatic || shouldNotifyAutomatically) {
+      if (result.hasUpdates && (!automatic || shouldNotifyAutomatically)) {
         _showUpdateSnack(tasks, result.newEpisodes.length);
       }
     } catch (e, stack) {
@@ -900,17 +880,10 @@ class _DownloadPageState extends State<DownloadPage>
     final message = updateCount == 0
         ? '暂无更新：${tasks.first.dramaName}'
         : '发现 $updateCount 集更新：${tasks.first.dramaName}';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 1),
-        action: updateCount > 0
-            ? SnackBarAction(
-                label: '查看',
-                onPressed: () => _openAlbumDetail(tasks),
-              )
-            : null,
-      ),
+    showAppNotice(
+      context,
+      message,
+      action: SnackBarAction(label: '查看', onPressed: () => _openAlbumDetail(tasks)),
     );
   }
 
@@ -920,12 +893,8 @@ class _DownloadPageState extends State<DownloadPage>
     final dramaKey = '${task.dramaName} (${task.dramaId})';
     final coverUrl =
         _albumCoverUrls[dramaKey] ??
-        tasks
-            .firstWhere((item) => item.dramaPic.isNotEmpty, orElse: () => task)
-            .dramaPic;
-    widget.onOpenDetail(
-      Drama(id: task.dramaId, name: task.dramaName, pic: coverUrl, remark: ''),
-    );
+        tasks.firstWhere((item) => item.dramaPic.isNotEmpty, orElse: () => task).dramaPic;
+    widget.onOpenDetail(Drama(id: task.dramaId, name: task.dramaName, pic: coverUrl, remark: ''));
   }
 
   bool get _canAutomaticallyCheck =>
@@ -946,8 +915,7 @@ class _DownloadPageState extends State<DownloadPage>
         final currentTasks = _completedAlbums()[entry.key];
         if (currentTasks == null) continue;
         final lastCheck = _lastAlbumCheckAt[entry.key];
-        if (lastCheck != null &&
-            widget.now().difference(lastCheck) < _automaticCheckInterval) {
+        if (lastCheck != null && widget.now().difference(lastCheck) < _automaticCheckInterval) {
           continue;
         }
         await _checkAlbum(entry.key, currentTasks, automatic: true);
@@ -979,10 +947,7 @@ class _DownloadPageState extends State<DownloadPage>
           style: TextStyle(color: Colors.grey[300]),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -1006,10 +971,7 @@ class _DownloadPageState extends State<DownloadPage>
           style: TextStyle(color: Colors.grey[300]),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -1027,9 +989,7 @@ class _DownloadPageState extends State<DownloadPage>
   void _playLocalFile(DownloadTask task) {
     final tasks = _conversionService
         .sortTasks(
-          _ds.completedTasks
-              .where((candidate) => candidate.dramaId == task.dramaId)
-              .toList(),
+          _ds.completedTasks.where((candidate) => candidate.dramaId == task.dramaId).toList(),
         )
         .where(_hasPlayableResource)
         .toList();
@@ -1068,11 +1028,7 @@ class _FormatBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -1141,9 +1097,9 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
   void _copyPath() {
     Clipboard.setData(ClipboardData(text: widget.outputPath));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('路径已复制'), duration: Duration(seconds: 1)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('路径已复制'), duration: Duration(seconds: 1)));
     }
   }
 
@@ -1160,12 +1116,9 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('打开失败: $e'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('打开失败: $e'), duration: const Duration(seconds: 2)));
       }
     }
   }
@@ -1187,18 +1140,13 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
               child: SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.orange,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.orange),
               ),
             ),
           Text(
             _status,
             style: TextStyle(
-              color: _error != null
-                  ? Colors.red
-                  : (_done ? Colors.green : Colors.white70),
+              color: _error != null ? Colors.red : (_done ? Colors.green : Colors.white70),
               fontSize: 14,
             ),
           ),
@@ -1234,11 +1182,7 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
             label: const Text('复制路径'),
           ),
         ],
-        if (_done)
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('确定'),
-          ),
+        if (_done) TextButton(onPressed: () => Navigator.pop(context), child: const Text('确定')),
       ],
     );
   }
