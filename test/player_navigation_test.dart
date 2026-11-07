@@ -4,12 +4,15 @@ import 'package:huangguo_flutter/models/episode.dart';
 import 'package:huangguo_flutter/pages/home_page.dart';
 import 'package:huangguo_flutter/pages/player_page.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   testWidgets('selecting a video reaches the existing player tab', (
     tester,
   ) async {
+    FlutterSecureStorage.setMockInitialValues({});
     await tester.pumpWidget(const HuangguoApp());
+    await tester.pump();
     final home = tester.widget<HomePage>(find.byType(HomePage));
     const episode = Episode(name: '测试集', url: '/test', ep: '1');
     home.onPlayEpisode(episode, [episode], '测试剧');

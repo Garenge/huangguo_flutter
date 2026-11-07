@@ -19,6 +19,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   ffmpeg_kit_flutter_new: ^4.6.2
   share_plus: ^10.0.0
+  flutter_secure_storage: ^10.3.4
+  cryptography: ^2.9.0
 
 dev_dependencies:
   flutter_test:

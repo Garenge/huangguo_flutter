@@ -27,6 +27,9 @@ import 'widgets/library_scope.dart';
 import 'services/library_service.dart';
 import 'services/playback_route_observer.dart';
 import 'package:path_provider/path_provider.dart';
+import 'services/gesture_lock_service.dart';
+import 'widgets/gesture_access_gate.dart';
+import 'widgets/gesture_lock_scope.dart';
 
 const _log = AppLog('MainShell');
 
@@ -34,31 +37,62 @@ void main() {
   runApp(const HuangguoApp());
 }
 
-class HuangguoApp extends StatelessWidget {
-  const HuangguoApp({super.key});
+class HuangguoApp extends StatefulWidget {
+  const HuangguoApp({super.key, this.gestureLock});
+
+  final GestureLockService? gestureLock;
+
+  @override
+  State<HuangguoApp> createState() => _HuangguoAppState();
+}
+
+class _HuangguoAppState extends State<HuangguoApp> {
+  late final _gestureLock = widget.gestureLock ?? GestureLockService();
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _gestureLock.load();
+  }
+
+  @override
+  void dispose() {
+    if (widget.gestureLock == null) _gestureLock.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '黄果短剧',
-      navigatorObservers: [playbackRootObserver],
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: Colors.orange,
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0D0D0D),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0D0D0D),
-          elevation: 0,
+    return GestureLockScope(
+      service: _gestureLock,
+      child: MaterialApp(
+        title: 'Flutter Demo',
+        navigatorKey: _navigatorKey,
+        builder: (context, child) => GestureAccessGate(
+          service: _gestureLock,
+          navigatorKey: _navigatorKey,
+          child: child!,
         ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Color(0xFF1A1A1A),
-          selectedItemColor: Colors.orange,
-          unselectedItemColor: Colors.grey,
+        navigatorObservers: [playbackRootObserver],
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          brightness: Brightness.dark,
+          colorSchemeSeed: Colors.orange,
+          useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFF0D0D0D),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFF0D0D0D),
+            elevation: 0,
+          ),
+          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+            backgroundColor: Color(0xFF1A1A1A),
+            selectedItemColor: Colors.orange,
+            unselectedItemColor: Colors.grey,
+          ),
         ),
+        home: const MainShell(),
       ),
-      home: const MainShell(),
     );
   }
 }
@@ -77,6 +111,7 @@ class _MainShellState extends State<MainShell> {
   final _library = LibraryService();
   final _playerObserver = createPlaybackRouteObserver();
   final _downloadObserver = createPlaybackRouteObserver();
+  GestureLockService? _gestureLock;
 
   late final Future<void> _networkReady;
   late final ProxySettingsService _proxyService;
@@ -101,6 +136,22 @@ class _MainShellState extends State<MainShell> {
   final _playerNavKey = GlobalKey<NavigatorState>();
   final _parseNavKey = GlobalKey<NavigatorState>();
   final _downloadNavKey = GlobalKey<NavigatorState>();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final service = GestureLockScope.maybeOf(context);
+    if (_gestureLock == service) return;
+    _gestureLock?.removeListener(_onAccessChanged);
+    _gestureLock = service;
+    _gestureLock?.addListener(_onAccessChanged);
+  }
+
+  void _onAccessChanged() {
+    if (_gestureLock?.canAccessReal == false) {
+      _playbackCoordinator.interruptAll();
+    }
+  }
 
   @override
   void initState() {
@@ -161,6 +212,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _gestureLock?.removeListener(_onAccessChanged);
     _library.dispose();
     _playbackSettings.dispose();
     _proxyService.removeListener(_onProxyChanged);

@@ -11,6 +11,8 @@ import '../services/site_endpoint_service.dart';
 import '../widgets/site_endpoint_tile.dart';
 import '../services/playback_settings_service.dart';
 import '../widgets/playback_settings_tile.dart';
+import '../widgets/gesture_lock_scope.dart';
+import '../widgets/gesture_settings_tile.dart';
 
 const _log = AppLog('SettingsPage');
 
@@ -124,6 +126,8 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (GestureLockScope.maybeOf(context) case final service?)
+            GestureSettingsTile(service: service),
           if (widget.playbackSettings != null)
             PlaybackSettingsTile(settings: widget.playbackSettings!),
           if (widget.sourceLoader != null)

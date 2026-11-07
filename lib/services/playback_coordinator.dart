@@ -18,6 +18,13 @@ class PlaybackCoordinator {
 
   bool owns(PlaybackSession session) => _owner == session;
 
+  Future<void> interruptAll() async {
+    _owner = null;
+    await Future.wait([
+      for (final session in _sessions.toList()) session.interrupt(),
+    ]);
+  }
+
   void remove(PlaybackSession session) {
     _sessions.remove(session);
     if (_owner == session) _owner = null;

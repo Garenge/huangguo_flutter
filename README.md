@@ -2,6 +2,23 @@
 
 Flutter 短剧浏览、在线播放与下载管理应用。
 
+## 手势解锁
+
+iOS 显示名称为 `Flutter Demo`。在真实应用「设置 → 手势解锁」开启，
+依次设置并二次确认 A、B；A 进入真实应用，B 进入交互演示页，两者必须不同。
+修改两套手势或关闭开关前均需验证当前 A。设置中退出或切后台不会保存未完成的手势。
+
+- 九宫格点位按从左到右、从上到下编号 1～9，至少连接 4 个不同的点；
+  跨过未选择的中间点时自动补入，`1→4→7→8→9` 为大 L。
+- 开关默认关闭。启用后，启动、锁屏或切后台再返回都重新验证，不记忆上一次
+  进入真实页还是演示页；先输入 B，切后台回来仍可输入 A。
+- 解锁层覆盖整个导航器，首次 A 验证前不创建真实页面。真实页锁定时暂停播放，
+  iOS 使用原生遮罩覆盖最近任务截图。已有下载任务不会因锁定而删除或取消。
+- 凭据以随机盐与 PBKDF2-HMAC-SHA256 派生值保存到系统安全存储，不保存明文手势，
+  不加入业务数据迁移。读取失败保持入口锁定，可点击重试。
+- 不提供绕过 A 的找回入口；请记住 A。手势入口不对已有业务文件实施加密。
+  iOS Keychain 中的设置可能在卸载后保留，重新安装不保证重置。
+
 ## 首页状态与收藏
 
 - 首页卡片左上角的星标可收藏或取消，点击星标不会进入详情；详情页也可操作。
@@ -51,12 +68,13 @@ flutter build ios --debug --no-codesign --no-pub
 播放器测试覆盖控制栏显隐、进度拖动、取消手势、临时倍速恢复、
 全屏源更新及窄屏布局。实际解码、网络片源与真机旋转仍需在设备上验收。
 
-本机 Xcode 27 要求部署版本至少为 iOS 15，现有 Runner/Pods 的旧部署版本会
-阻止默认 iOS 构建。此次仅用以下命令临时覆盖部署版本完成无签名编译验证，
-未修改工程的最低系统版本；正式兼容范围仍需单独确定。
+本机 Xcode 27 要求部署版本至少为 iOS 15。Runner 已设为 iOS 15，
+`ios/Podfile` 同时将依赖的低版本部署目标提升至 iOS 15。
+可使用以下命令编译或导出开发签名 IPA：
 
 ```sh
 xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner \
   -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO IPHONEOS_DEPLOYMENT_TARGET=15.0 build
+flutter build ipa --release --export-method development --no-pub
 ```
