@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/playback_session.dart';
@@ -304,13 +305,30 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   }
 
   Widget _buildGestureLayer(double width) {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: {
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(
+                duration: const Duration(milliseconds: 250),
+              ),
+              (instance) {
+                instance.onLongPressStart = (_) => _startFastForward();
+                instance.onLongPressEnd = (_) => _endFastForward();
+                instance.onLongPressCancel = _endFastForward;
+              },
+            ),
+      },
+      child: _buildTapAndDragGestures(width),
+    );
+  }
+
+  Widget _buildTapAndDragGestures(double width) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _toggleControls,
       onDoubleTap: widget.onToggleFullscreen,
-      onLongPressStart: (_) => _startFastForward(),
-      onLongPressEnd: (_) => _endFastForward(),
-      onLongPressCancel: _endFastForward,
       onHorizontalDragStart: (_) {
         _dragStart = _controller!.value.position;
         _dragDistance = 0;
