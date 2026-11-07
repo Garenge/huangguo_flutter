@@ -128,6 +128,7 @@ class _MainShellState extends State<MainShell> {
   List<Episode> _pendingEpisodes = [];
   String? _pendingDramaName;
   String? _pendingDramaId;
+  Drama? _pendingDrama;
   Duration? _pendingStartPosition;
 
   // Nested navigator keys
@@ -228,12 +229,14 @@ class _MainShellState extends State<MainShell> {
     List<Episode> allEpisodes, {
     String? dramaName,
     String? dramaId,
+    Drama? drama,
   }) {
     setState(() {
       _pendingEpisode = episode;
       _pendingEpisodes = allEpisodes;
       _pendingDramaName = dramaName;
       _pendingDramaId = dramaId;
+      _pendingDrama = drama;
       _pendingStartPosition = null;
       _currentIndex = 1;
     });
@@ -251,6 +254,7 @@ class _MainShellState extends State<MainShell> {
       _pendingEpisodes = [episode];
       _pendingDramaName = entry.dramaName;
       _pendingDramaId = entry.dramaId;
+      _pendingDrama = null;
       _pendingStartPosition = Duration(milliseconds: entry.positionMs);
       _currentIndex = 1;
     });
@@ -271,8 +275,13 @@ class _MainShellState extends State<MainShell> {
           htmlParser: _htmlParser,
           imageDecryptor: _imageDecryptor,
           downloadService: _downloadService,
-          onPlayEpisode: (ep, eps) =>
-              _playEpisode(ep, eps, dramaName: drama.name, dramaId: drama.id),
+          onPlayEpisode: (ep, eps) => _playEpisode(
+            ep,
+            eps,
+            dramaName: drama.name,
+            dramaId: drama.id,
+            drama: drama,
+          ),
         ),
       ),
     );
@@ -380,6 +389,7 @@ class _MainShellState extends State<MainShell> {
           startPosition: _pendingStartPosition,
           dramaName: _pendingDramaName,
           dramaId: _pendingDramaId,
+          drama: _pendingDrama,
           onPlayFromHistory: _playFromHistory,
         ),
       ),

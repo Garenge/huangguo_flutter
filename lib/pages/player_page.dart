@@ -18,6 +18,8 @@ import '../services/app_log.dart';
 import '../widgets/episode_grid.dart';
 import '../widgets/app_video_player.dart';
 import '../widgets/library_scope.dart';
+import '../widgets/favorite_button.dart';
+import '../widgets/player_download_button.dart';
 import '../widgets/app_notice.dart';
 import '../widgets/watch_progress.dart';
 import '../services/library_service.dart';
@@ -34,6 +36,7 @@ class PlayerPage extends StatefulWidget {
   final Duration? startPosition;
   final String? dramaName;
   final String? dramaId;
+  final Drama? drama;
   final void Function(PlaybackHistoryEntry entry)? onPlayFromHistory;
 
   const PlayerPage({
@@ -47,6 +50,7 @@ class PlayerPage extends StatefulWidget {
     this.startPosition,
     this.dramaName,
     this.dramaId,
+    this.drama,
     this.onPlayFromHistory,
   });
 
@@ -365,37 +369,6 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  void _downloadCurrent() async {
-    if (_currentEp == null) return;
-    final ds = widget.downloadService;
-    if (ds == null) return;
-
-    final dramaName = widget.dramaName ?? '\u672a\u77e5\u5267\u96c6';
-    final dramaId = widget.dramaId ?? '0';
-    final drama = Drama(id: dramaId, name: dramaName, pic: '', remark: '');
-    final task = await ds.addTask(drama, _currentEp!);
-    if (task == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            '\u8be5\u5267\u96c6\u5df2\u5728\u4e0b\u8f7d\u961f\u5217\u4e2d',
-          ),
-          backgroundColor: Colors.grey,
-        ),
-      );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '\u5df2\u52a0\u5165\u4e0b\u8f7d\u961f\u5217\uff1a${_currentEp!.name}',
-          ),
-          backgroundColor: Colors.green[700],
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
   void _showHistory() {
     if (widget.historyService == null) return;
     showModalBottomSheet(
@@ -416,6 +389,21 @@ class _PlayerPageState extends State<PlayerPage> {
           widget.historyService!.deleteEntry(id);
         },
       ),
+    );
+  }
+
+  Drama? get _favoriteDrama {
+    final id = widget.dramaId;
+    if (id == null || id.trim().isEmpty) return null;
+    if (widget.drama?.id == id) return widget.drama;
+    for (final drama in _library?.favorites ?? <Drama>[]) {
+      if (drama.id == id) return drama;
+    }
+    return Drama(
+      id: id,
+      name: widget.dramaName ?? _currentEp!.name,
+      pic: '',
+      remark: '',
     );
   }
 
@@ -486,6 +474,7 @@ class _PlayerPageState extends State<PlayerPage> {
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          if (_favoriteDrama case final drama?) FavoriteButton(drama: drama),
           if (widget.historyService != null)
             IconButton(
               icon: const Icon(Icons.history_rounded),
@@ -494,11 +483,18 @@ class _PlayerPageState extends State<PlayerPage> {
               onPressed: _showHistory,
             ),
           if (widget.downloadService != null)
-            IconButton(
-              icon: const Icon(Icons.download_rounded),
-              color: Colors.orange,
-              tooltip: '\u4e0b\u8f7d\u5f53\u524d\u5267\u96c6',
-              onPressed: _downloadCurrent,
+            PlayerDownloadButton(
+              key: ValueKey((widget.dramaId, _currentEp!.ep, _currentEp!.url)),
+              service: widget.downloadService!,
+              drama:
+                  _favoriteDrama ??
+                  Drama(
+                    id: widget.dramaId ?? '0',
+                    name: widget.dramaName ?? '未知剧集',
+                    pic: '',
+                    remark: '',
+                  ),
+              episode: _currentEp!,
             ),
           IconButton(
             icon: const Icon(Icons.stop_rounded),
