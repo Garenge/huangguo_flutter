@@ -4,16 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/drama.dart';
 import '../models/download_task.dart';
+import '../models/storage_usage.dart';
 import '../services/album_update_checker.dart';
 import '../services/download_service.dart';
 import '../services/download_file_service.dart';
 import '../services/download_catalog.dart';
 import '../services/download_settings_service.dart';
+import '../services/download_storage_controller.dart';
+import '../services/storage_usage_service.dart';
 import '../services/app_log.dart';
 import '../services/huangguo_api.dart';
 import '../services/html_parser.dart';
 import '../services/video_conversion_service.dart';
 import '../widgets/download_task_tile.dart';
+import '../widgets/download_storage_panel.dart';
 import '../widgets/local_download_player.dart';
 import '../widgets/library_scope.dart';
 import '../widgets/share_origin.dart';
@@ -32,6 +36,7 @@ class DownloadPage extends StatefulWidget {
   final void Function(Drama drama) onOpenDetail;
   final DownloadSettingsService? downloadSettings;
   final DateTime Function() now;
+  final StorageUsageService? storageUsageService;
 
   const DownloadPage({
     super.key,
@@ -41,6 +46,7 @@ class DownloadPage extends StatefulWidget {
     required this.onOpenDetail,
     this.downloadSettings,
     this.now = DateTime.now,
+    this.storageUsageService,
   });
 
   @override
@@ -52,6 +58,7 @@ class _DownloadPageState extends State<DownloadPage>
   late TabController _tabController;
   late final VideoConversionService _conversionService;
   late final AlbumUpdateChecker _updateChecker;
+  late final DownloadStorageController _storageController;
   Timer? _automaticCheckTimer;
 
   final Set<String> _convertingGroups = {};
@@ -85,6 +92,10 @@ class _DownloadPageState extends State<DownloadPage>
   void initState() {
     super.initState();
     _downloadSettings = widget.downloadSettings ?? DownloadSettingsService();
+    _storageController = DownloadStorageController(
+      widget.downloadService,
+      widget.storageUsageService ?? StorageUsageService(),
+    );
     unawaited(_loadSortMode());
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
@@ -102,6 +113,7 @@ class _DownloadPageState extends State<DownloadPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _automaticCheckTimer?.cancel();
+    _storageController.dispose();
     widget.downloadService.removeListener(_onServiceChanged);
     _completedScrollController.dispose();
     _completedSearchController.dispose();
@@ -130,7 +142,12 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   void _onTabChanged() {
+    _updateStorageActivity();
     if (mounted) setState(() {});
+  }
+
+  void _updateStorageActivity() {
+    _storageController.setActive(_isAppInForeground && _tabController.index == 1);
   }
 
   DownloadService get _ds => widget.downloadService;
@@ -138,6 +155,7 @@ class _DownloadPageState extends State<DownloadPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _isAppInForeground = state == AppLifecycleState.resumed;
+    _updateStorageActivity();
     if (_isAppInForeground) unawaited(_runAutomaticCheck());
   }
 
@@ -231,29 +249,28 @@ class _DownloadPageState extends State<DownloadPage>
   Widget _buildCompletedTab() {
     final completed = DownloadCatalog.filter(_ds.completedTasks, _completedSearchController.text);
 
-    if (completed.isEmpty) {
-      return CustomScrollView(
-        controller: _completedScrollController,
-        slivers: [
-          _buildCompletedToolbar(),
-          SliverFillRemaining(hasScrollBody: false, child: _buildCompletedEmptyState()),
-        ],
-      );
-    }
-
     final grouped = DownloadCatalog.groupAndSort(completed, _completedSortMode);
     _pruneAlbumCheckState(grouped.keys.toSet());
 
-    return CustomScrollView(
-      controller: _completedScrollController,
-      slivers: [
+    return Column(
+      children: [
         _buildCompletedToolbar(),
-        for (final entry in grouped.entries)
-          SliverMainAxisGroup(
-            key: ValueKey(entry.key),
-            slivers: _buildAlbumSlivers(entry.key, entry.value),
+        Expanded(
+          child: CustomScrollView(
+            controller: _completedScrollController,
+            slivers: [
+              if (completed.isEmpty)
+                SliverFillRemaining(hasScrollBody: false, child: _buildCompletedEmptyState()),
+              for (final entry in grouped.entries)
+                SliverMainAxisGroup(
+                  key: ValueKey(entry.key),
+                  slivers: _buildAlbumSlivers(entry.key, entry.value),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            ],
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        ),
+        DownloadStoragePanel(controller: _storageController),
       ],
     );
   }
@@ -266,70 +283,68 @@ class _DownloadPageState extends State<DownloadPage>
     ).length;
     final hasQuery = _completedSearchController.text.trim().isNotEmpty;
 
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-        child: Column(
-          children: [
-            TextField(
-              controller: _completedSearchController,
-              onChanged: (_) => setState(() {}),
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: '搜索剧名、剧集或拼音',
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
-                prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
-                suffixIcon: hasQuery
-                    ? IconButton(
-                        tooltip: '清除搜索',
-                        icon: const Icon(Icons.clear_rounded, size: 18),
-                        onPressed: () {
-                          _completedSearchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: const Color(0xFF242424),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: Column(
+        children: [
+          TextField(
+            controller: _completedSearchController,
+            onChanged: (_) => setState(() {}),
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: '搜索剧名、剧集或拼音',
+              hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+              prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
+              suffixIcon: hasQuery
+                  ? IconButton(
+                      tooltip: '清除搜索',
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      onPressed: () {
+                        _completedSearchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: const Color(0xFF242424),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
               ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Text(
-                  hasQuery ? '找到 $resultCount / $totalCount 集' : '$totalCount 集',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-                const Spacer(),
-                PopupMenuButton<DownloadSortMode>(
-                  tooltip: '排序方式',
-                  initialValue: _completedSortMode,
-                  onSelected: _selectSortMode,
-                  itemBuilder: (_) => [
-                    for (final mode in DownloadSortMode.values)
-                      PopupMenuItem(value: mode, child: Text(mode.label)),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                hasQuery ? '找到 $resultCount / $totalCount 集' : '$totalCount 集',
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
+              const Spacer(),
+              PopupMenuButton<DownloadSortMode>(
+                tooltip: '排序方式',
+                initialValue: _completedSortMode,
+                onSelected: _selectSortMode,
+                itemBuilder: (_) => [
+                  for (final mode in DownloadSortMode.values)
+                    PopupMenuItem(value: mode, child: Text(mode.label)),
+                ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.sort_rounded, size: 17, color: Colors.orange),
+                    const SizedBox(width: 4),
+                    Text(
+                      _completedSortMode.label,
+                      style: const TextStyle(color: Colors.orange, fontSize: 12),
+                    ),
                   ],
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.sort_rounded, size: 17, color: Colors.orange),
-                      const SizedBox(width: 4),
-                      Text(
-                        _completedSortMode.label,
-                        style: const TextStyle(color: Colors.orange, fontSize: 12),
-                      ),
-                    ],
-                  ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -427,6 +442,8 @@ class _DownloadPageState extends State<DownloadPage>
                       Text(
                         _conversionStatus[dramaKey] ?? _watchSummary(tasks),
                         style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -466,6 +483,20 @@ class _DownloadPageState extends State<DownloadPage>
       tooltip: '更多',
       onSelected: (action) => _handleAlbumAction(action, dramaKey, tasks),
       itemBuilder: (_) => [
+        PopupMenuItem<_AlbumAction>(
+          enabled: false,
+          child: ListenableBuilder(
+            listenable: _storageController,
+            builder: (_, _) {
+              final usage = _storageController.usage;
+              final size = usage == null && _storageController.refreshing
+                  ? '统计中…'
+                  : formatStorageBytes(usage?.albumBytes[dramaKey]);
+              return Text('本套占用：$size', style: const TextStyle(color: Colors.grey));
+            },
+          ),
+        ),
+        const PopupMenuDivider(),
         PopupMenuItem(
           value: _AlbumAction.check,
           enabled: !isChecking,

@@ -9,6 +9,7 @@ import 'package:huangguo_flutter/services/download_settings_service.dart';
 import 'package:huangguo_flutter/services/huangguo_api.dart';
 import 'package:huangguo_flutter/services/html_parser.dart';
 import 'package:huangguo_flutter/services/library_service.dart';
+import 'package:huangguo_flutter/services/storage_usage_service.dart';
 import 'package:huangguo_flutter/widgets/library_scope.dart';
 
 class TestDownloadService extends DownloadService {
@@ -62,6 +63,7 @@ Future<TestDownloadService> mountDownloads(
   List<DownloadTask>? tasks,
   TestAlbumApi? albumApi,
   bool hasPendingTasks = false,
+  StorageUsageService? storageUsageService,
 }) async {
   if (downloadSettings == null) {
     final directory = Directory.systemTemp.createTempSync('download_page_sort');
@@ -93,6 +95,7 @@ Future<TestDownloadService> mountDownloads(
       onOpenDetail: (_) {},
       downloadSettings: downloadSettings,
       now: tester.binding.clock.now,
+      storageUsageService: storageUsageService,
     ),
   );
   await tester.pumpWidget(
