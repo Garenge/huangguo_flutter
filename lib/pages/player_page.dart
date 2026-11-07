@@ -230,7 +230,10 @@ class _PlayerPageState extends State<PlayerPage> {
       await previous?.dispose();
       final url = await _resolver!.resolveStream(episode);
       if (!mounted || generation != _loadGeneration) return;
-      candidate = VideoPlayerController.networkUrl(Uri.parse(url));
+      candidate = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        httpHeaders: _resolver!.streamHeaders,
+      );
       await candidate.initialize();
       if (!mounted || generation != _loadGeneration) {
         await candidate.dispose();

@@ -304,7 +304,8 @@ class HtmlParser {
           (videoData?['videoSrc']?.toString().isNotEmpty ?? false) ||
           (videoData?['epPlaySrcs'] is Map &&
               (videoData!['epPlaySrcs'] as Map).isNotEmpty);
-      if (id.isNotEmpty && hasVideo) {
+      if (id.isNotEmpty &&
+          (hasVideo || _isApiSingleVideo(document, videoData))) {
         episodes.add(Episode(name: '第1集', url: '/video/$id/', ep: '1'));
       }
     }
@@ -315,6 +316,16 @@ class HtmlParser {
       _log.i('parseEpisodes: ${episodes.length} episodes');
     }
     return episodes;
+  }
+
+  bool _isApiSingleVideo(
+    dom.Document document,
+    Map<String, dynamic>? data,
+  ) {
+    return RegExp(r'^\d+$').hasMatch(data?['id']?.toString() ?? '') &&
+        data?['videoType']?.toString() == '1' &&
+        document.querySelector('[data-web-play][data-show-episodes="0"]') !=
+            null;
   }
 
   String parseDetailCover(String html) {

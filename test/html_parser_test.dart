@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huangguo_flutter/services/html_parser.dart';
 
+import 'helpers/api_single_video_fixture.dart';
+
 void main() {
   final parser = HtmlParser('https://huangguoai.com');
 
@@ -181,6 +183,42 @@ void main() {
     expect(episodes.single.name, '第1集');
     expect(episodes.single.ep, '1');
     expect(episodes.single.url, '/video/10732/');
+  });
+
+  test('creates an API-only single-video episode without embedded URLs', () {
+    final episode = parser.parseEpisodes(apiSingleVideoHtml).single;
+
+    expect(episode.name, '第1集');
+    expect(episode.ep, '1');
+    expect(episode.url, '/video/11969/');
+  });
+
+  test('does not invent API episodes without single-video markers', () {
+    for (final html in [
+      apiSingleVideoHtml.replaceAll('data-show-episodes="0"', ''),
+      apiSingleVideoHtml.replaceAll('"videoType":1', '"videoType":2'),
+      apiSingleVideoHtml.replaceAll('"id":"11969"', '"id":"invalid"'),
+      apiSingleVideoHtml.replaceAll('"id":"11969"', '"id":""'),
+    ]) {
+      expect(parser.parseEpisodes(html), isEmpty);
+    }
+  });
+
+  test('preserves explicit episode links ahead of the single-video fallback', () {
+    const html = '''
+      $apiSingleVideoHtml
+      <div class="hg-web-play__ep-grid">
+        <a href="/play/11969/1/" data-ep-id="1">第1集</a>
+        <a href="/play/11969/2/" data-ep-id="2">第2集</a>
+      </div>
+    ''';
+    final episodes = parser.parseEpisodes(html);
+
+    expect(episodes.map((episode) => episode.ep), ['1', '2']);
+    expect(episodes.map((episode) => episode.url), [
+      '/play/11969/1/',
+      '/play/11969/2/',
+    ]);
   });
 
   test('parses HLS URL from the single-video embedded data', () {

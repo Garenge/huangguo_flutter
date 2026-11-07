@@ -3,6 +3,8 @@ import 'package:huangguo_flutter/models/episode.dart';
 import 'package:huangguo_flutter/services/huangguo_api.dart';
 import 'package:huangguo_flutter/services/stream_resolver.dart';
 
+import 'helpers/api_single_video_fixture.dart';
+
 class _Api extends HuangguoApi {
   Map<String, dynamic>? playback;
   int playbackCalls = 0;
@@ -23,6 +25,19 @@ class _Api extends HuangguoApi {
 }
 
 void main() {
+  test('resolves an API-only detail page through the playback endpoint', () async {
+    final api = ApiSingleVideoFixture();
+    addTearDown(api.dispose);
+    final resolver = StreamResolver(api);
+    final episodes = await resolver.resolveEpisodes('11969');
+
+    expect(episodes, hasLength(1));
+    expect(await resolver.resolveStream(episodes.single),
+        'https://cdn.example/main.m3u8');
+    expect(api.requests, ['11969:1']);
+    expect(resolver.streamHeaders, apiSingleVideoHeaders);
+  });
+
   test('resolves current playback API and keeps CDN headers', () async {
     final api = _Api()
       ..playback = {
