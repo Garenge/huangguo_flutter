@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/drama.dart';
 import 'library_scope.dart';
+import 'app_notice.dart';
 
 class FavoriteButton extends StatelessWidget {
   const FavoriteButton({super.key, required this.drama});
@@ -26,8 +27,10 @@ class FavoriteButton extends StatelessWidget {
     final library = LibraryScope.maybeOf(context)!;
     final saved = await library.toggleFavorite(drama);
     if (!saved && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(library.errorMessage ?? '收藏状态保存失败')),
+      showAppNotice(
+        context,
+        library.errorMessage ?? '收藏状态保存失败',
+        duration: const Duration(seconds: 4),
       );
     }
   }

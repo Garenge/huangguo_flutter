@@ -11,6 +11,7 @@ import '../services/download_service.dart';
 import '../services/app_log.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/favorite_button.dart';
+import '../widgets/app_notice.dart';
 
 const _log = AppLog('DetailPage');
 
@@ -83,12 +84,10 @@ class _DetailPageState extends State<DetailPage> {
     if (!mounted) return;
     setState(() {});
     for (final episodeName in completedEpisodes) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('下载完成：$episodeName'),
-          backgroundColor: Colors.green[700],
-          duration: const Duration(seconds: 2),
-        ),
+      showAppNotice(
+        context,
+        '下载完成：$episodeName',
+        backgroundColor: Colors.green[700],
       );
     }
   }
@@ -162,23 +161,18 @@ class _DetailPageState extends State<DetailPage> {
     _log.i('_onDownloadEpisode: ${episode.name}');
     final task = await widget.downloadService.addTask(widget.drama, episode);
     if (task == null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.downloadService.isResourceDownloaded(widget.drama, episode)
-                ? '该剧集已下载，无需重复下载'
-                : '该剧集已有下载任务',
-          ),
-          backgroundColor: Colors.grey,
-        ),
+      showAppNotice(
+        context,
+        widget.downloadService.isResourceDownloaded(widget.drama, episode)
+            ? '该剧集已下载，无需重复下载'
+            : '该剧集已有下载任务',
+        backgroundColor: Colors.grey,
       );
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已加入下载队列：${episode.name}'),
-          backgroundColor: Colors.green[700],
-          duration: const Duration(seconds: 2),
-        ),
+      showAppNotice(
+        context,
+        '已加入下载队列：${episode.name}',
+        backgroundColor: Colors.green[700],
       );
     }
   }
@@ -193,24 +187,19 @@ class _DetailPageState extends State<DetailPage> {
         _episodes,
       );
       if (!mounted) return;
-      final message = result.skippedCount == 0
+      final message = result.retriedCount > 0
+          ? '新增 ${result.addedCount} 集，重试 ${result.retriedCount} 集，跳过 ${result.skippedCount} 集'
+          : result.skippedCount == 0
           ? '已加入 ${result.addedCount} 集下载任务'
           : '新增 ${result.addedCount} 集，跳过 ${result.skippedCount} 集';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.green[700],
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      showAppNotice(context, message, backgroundColor: Colors.green[700]);
     } catch (e, stack) {
       _log.e('_onDownloadAll: failed', e, stack);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加入下载失败：$e'),
-            backgroundColor: Colors.red[700],
-          ),
+        showAppNotice(
+          context,
+          '加入下载失败：$e',
+          backgroundColor: Colors.red[700],
         );
       }
     } finally {

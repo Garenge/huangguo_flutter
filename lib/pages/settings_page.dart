@@ -13,6 +13,7 @@ import '../services/playback_settings_service.dart';
 import '../widgets/playback_settings_tile.dart';
 import '../widgets/gesture_lock_scope.dart';
 import '../widgets/gesture_settings_tile.dart';
+import '../widgets/app_notice.dart';
 
 const _log = AppLog('SettingsPage');
 
@@ -101,9 +102,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-    );
+    showAppNotice(context, msg);
   }
 
   @override

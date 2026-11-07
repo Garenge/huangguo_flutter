@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/site_endpoint.dart';
 import '../services/site_endpoint_service.dart';
+import 'app_notice.dart';
 
 class SiteEndpointTile extends StatefulWidget {
   final SiteEndpointService service;
@@ -40,9 +41,7 @@ class _SiteEndpointTileState extends State<SiteEndpointTile> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
+    showAppNotice(context, message);
   }
 
   String _formatResult(SiteEndpoint item) {

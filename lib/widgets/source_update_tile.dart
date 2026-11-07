@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/source_loader.dart';
+import 'app_notice.dart';
 
 class SourceUpdateTile extends StatefulWidget {
   final SourceLoader sourceLoader;
@@ -24,9 +25,7 @@ class _SourceUpdateTileState extends State<SourceUpdateTile> {
     }
     if (!mounted) return;
     setState(() => _loading = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showAppNotice(context, message, duration: const Duration(seconds: 4));
   }
 
   @override

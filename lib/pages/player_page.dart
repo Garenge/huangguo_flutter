@@ -18,6 +18,7 @@ import '../services/app_log.dart';
 import '../widgets/episode_grid.dart';
 import '../widgets/app_video_player.dart';
 import '../widgets/library_scope.dart';
+import '../widgets/app_notice.dart';
 import '../widgets/watch_progress.dart';
 import '../services/library_service.dart';
 
@@ -355,13 +356,11 @@ class _PlayerPageState extends State<PlayerPage> {
   void _copyStreamUrl() {
     if (_streamUrl != null) {
       Clipboard.setData(ClipboardData(text: _streamUrl!));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            '\u5df2\u590d\u5236\u6d41\u5730\u5740\u5230\u526a\u8d34\u677f',
-          ),
-          backgroundColor: Colors.grey[800],
-        ),
+      showAppNotice(
+        context,
+        '已复制流地址到剪贴板',
+        backgroundColor: Colors.grey[800],
+        duration: const Duration(seconds: 4),
       );
     }
   }

@@ -1123,9 +1123,7 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
   void _copyPath() {
     Clipboard.setData(ClipboardData(text: widget.outputPath));
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('路径已复制'), duration: Duration(seconds: 1)));
+      showAppNotice(context, '路径已复制', duration: const Duration(seconds: 1));
     }
   }
 
@@ -1142,9 +1140,7 @@ class _ExportProgressDialogState extends State<_ExportProgressDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('打开失败: $e'), duration: const Duration(seconds: 2)));
+        showAppNotice(context, '打开失败: $e');
       }
     }
   }

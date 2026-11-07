@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../pages/gesture_setup_page.dart';
 import '../services/gesture_lock_service.dart';
+import 'app_notice.dart';
 
 class GestureSettingsTile extends StatefulWidget {
   const GestureSettingsTile({super.key, required this.service});
@@ -28,9 +29,11 @@ class _GestureSettingsTileState extends State<GestureSettingsTile> {
     if (!mounted) return;
     setState(() => _opening = false);
     if (success == true) {
-      ScaffoldMessenger.of(
+      showAppNotice(
         context,
-      ).showSnackBar(SnackBar(content: Text(disabling ? '手势解锁已关闭' : '手势已保存')));
+        disabling ? '手势解锁已关闭' : '手势已保存',
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 

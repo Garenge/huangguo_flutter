@@ -53,6 +53,12 @@ void main() {
     await drawGesture(tester, gestureA);
     expect(service.enabled, isFalse);
     expect(find.byType(GestureSetupPage), findsNothing);
+    final notice = find.text('手势解锁已关闭');
+    expect(notice, findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(tester.getTopLeft(notice).dy, lessThan(100));
+    await tester.pump(const Duration(seconds: 4));
+    expect(notice, findsNothing);
     await tester.pumpWidget(const SizedBox());
     service.dispose();
   });

@@ -5,6 +5,7 @@ import '../services/html_parser.dart';
 import '../services/stream_resolver.dart';
 import '../services/app_log.dart';
 import '../widgets/loading_indicator.dart';
+import '../widgets/app_notice.dart';
 
 const _log = AppLog('ManualParse');
 
@@ -110,11 +111,11 @@ class _ManualParsePageState extends State<ManualParsePage> {
     if (_resultUrl != null) {
       Clipboard.setData(ClipboardData(text: _resultUrl!));
       _log.d('_copyResult: copied');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('已复制流地址到剪贴板'),
-          backgroundColor: Colors.grey[800],
-        ),
+      showAppNotice(
+        context,
+        '已复制流地址到剪贴板',
+        backgroundColor: Colors.grey[800],
+        duration: const Duration(seconds: 4),
       );
     }
   }

@@ -118,6 +118,12 @@ void main() {
     await tester.pump();
     expect(playedEpisode, '1');
     expect(service.tasks.single.ep, '2');
+    final notice = find.text('已加入下载队列：第2集');
+    expect(notice, findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(tester.getTopLeft(notice).dy, lessThan(100));
+    await tester.pump(const Duration(seconds: 2));
+    expect(notice, findsNothing);
   });
 
   testWidgets('completed download updates the episode and shows a notice', (
@@ -152,6 +158,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    final notice = find.text('下载完成：第1集');
+    expect(notice, findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(tester.getTopLeft(notice).dy, lessThan(100));
+    await tester.pump(const Duration(seconds: 2));
+    expect(notice, findsNothing);
   });
 
   testWidgets('falls back to the home card cover when detail cover fails', (

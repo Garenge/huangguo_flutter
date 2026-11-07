@@ -11,6 +11,7 @@ void showAppNotice(
   String message, {
   Color? backgroundColor,
   SnackBarAction? action,
+  Duration duration = const Duration(seconds: 2),
 }) {
   _noticeTimer?.cancel();
   _activeNoticeEntry?.remove();
@@ -56,7 +57,7 @@ void showAppNotice(
   );
   _activeNoticeEntry = entry;
   Overlay.of(context, rootOverlay: true).insert(entry);
-  _noticeTimer = Timer(const Duration(seconds: 2), () {
+  _noticeTimer = Timer(duration, () {
     if (entry.mounted) entry.remove();
     if (identical(_activeNoticeEntry, entry)) _activeNoticeEntry = null;
   });
