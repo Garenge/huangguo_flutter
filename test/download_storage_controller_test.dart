@@ -10,9 +10,17 @@ import 'helpers/download_page_fixture.dart';
 
 class _ControlledStorage extends StorageUsageService {
   final reads = <Completer<StorageUsage>>[];
+  final appReads = <Completer<StorageUsage>>[];
 
   @override
   Future<StorageUsage> read(DownloadService downloads) {
+    final pending = Completer<StorageUsage>();
+    appReads.add(pending);
+    return pending.future;
+  }
+
+  @override
+  Future<StorageUsage> readDownloadUsage(DownloadService downloads) {
     final result = Completer<StorageUsage>();
     reads.add(result);
     return result.future;
@@ -36,6 +44,78 @@ void main() {
     downloads.dispose();
     api.dispose();
   });
+
+  testWidgets('app scans on activation but not on periodic refresh', (
+    tester,
+  ) async {
+    controller.setActive(true);
+    service.reads.last.complete(const StorageUsage());
+    service.appReads.last.complete(const StorageUsage(appBytes: 100));
+    await tester.pump();
+    expect(controller.appUsage?.appBytes, 100);
+    await tester.pump(const Duration(seconds: 20));
+    expect(service.appReads.length, 1);
+    service.reads.last.complete(const StorageUsage());
+    await tester.pump();
+    controller.setActive(false);
+    controller.setActive(true);
+    expect(service.appReads.length, 2);
+    service.appReads.last.complete(const StorageUsage(appBytes: 120));
+    service.reads.last.complete(const StorageUsage());
+    await tester.pump();
+    expect(controller.appUsage?.appBytes, 120);
+    controller.setActive(false);
+  });
+
+  test(
+    'app failures and unavailable results preserve last usable size',
+    () async {
+      controller.updateAppUsage(const StorageUsage(appBytes: 100));
+      final refresh = controller.refreshAppUsage();
+      expect(controller.appRefreshing, isTrue);
+      service.appReads.last.completeError(StateError('unreadable'));
+      await refresh;
+      expect(controller.appUsage?.appBytes, 100);
+      expect(controller.appRefreshFailed, isTrue);
+      controller.updateAppUsage(const StorageUsage());
+      expect(controller.appUsage?.appBytes, 100);
+      expect(controller.appRefreshFailed, isTrue);
+      controller.updateAppUsage(
+        const StorageUsage(appBytes: 80, failedPaths: ['/blocked']),
+      );
+      expect(controller.appUsage?.isPartial, isTrue);
+      expect(controller.appRefreshFailed, isFalse);
+    },
+  );
+
+  test(
+    'management result takes precedence over older in-flight app scan',
+    () async {
+      final refresh = controller.refreshAppUsage();
+      await controller.refreshAppUsage();
+      expect(service.appReads.length, 1);
+      controller.updateAppUsage(const StorageUsage(appBytes: 200));
+      service.appReads.last.complete(const StorageUsage(appBytes: 100));
+      await refresh;
+      expect(controller.appUsage?.appBytes, 200);
+      expect(controller.appRefreshFailed, isFalse);
+    },
+  );
+
+  test(
+    'app scan completion after disposal does not notify listeners',
+    () async {
+      final detached = DownloadStorageController(downloads, service);
+      var notifications = 0;
+      detached.addListener(() => notifications++);
+      final refresh = detached.refreshAppUsage();
+      detached.dispose();
+      service.appReads.last.complete(const StorageUsage(appBytes: 100));
+      await refresh;
+      expect(notifications, 1);
+      expect(detached.appUsage, isNull);
+    },
+  );
 
   testWidgets(
     'coalesces changes during scan and ignores progress-only notifications',
@@ -77,6 +157,6 @@ void main() {
     expect(service.reads.length, 2);
     service.reads.last.complete(const StorageUsage());
     await tester.pump();
-      controller.setActive(false);
+    controller.setActive(false);
   });
 }

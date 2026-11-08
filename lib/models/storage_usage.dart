@@ -4,6 +4,7 @@ class StorageUsage {
   final int? appBytes;
   final bool includesApplication;
   final Map<String, int?> albumBytes;
+  final List<String> failedPaths;
 
   const StorageUsage({
     this.totalBytes,
@@ -11,6 +12,7 @@ class StorageUsage {
     this.appBytes,
     this.includesApplication = false,
     this.albumBytes = const {},
+    this.failedPaths = const [],
   });
 
   int? get usedBytes {
@@ -21,6 +23,8 @@ class StorageUsage {
   }
 
   String get appLabel => includesApplication ? 'App 占用（估算）' : 'App 数据占用';
+
+  bool get isPartial => failedPaths.isNotEmpty && appBytes != null;
 }
 
 String formatStorageBytes(int? bytes) {

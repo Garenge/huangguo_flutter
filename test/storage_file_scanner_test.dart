@@ -79,4 +79,45 @@ void main() {
       isNull,
     );
   });
+
+  test('unreadable directory keeps partial app size but not album total', () {
+    write('readable/video.mp4', 70);
+    write('blocked/video.mp4', 30);
+    final blocked = '${root.path}/blocked';
+    final scanner = StorageFileScanner(
+      listDirectory: (path) {
+        if (path == blocked) {
+          throw FileSystemException(
+            'Permission denied',
+            path,
+            const OSError('denied', 13),
+          );
+        }
+        return Directory(path).listSync(followLinks: false);
+      },
+    );
+    final result = scanner.scan(
+      [root.path],
+      {
+        'album': [root.path],
+      },
+    );
+    expect(result.appBytes, 70);
+    expect(result.albumBytes['album'], isNull);
+    expect(result.failedPaths, [blocked]);
+  });
+
+  test('all unreadable roots stay unavailable rather than showing zero', () {
+    final result = StorageFileScanner(
+      listDirectory: (path) {
+        throw FileSystemException(
+          'Permission denied',
+          path,
+          const OSError('denied', 13),
+        );
+      },
+    ).scan([root.path], {});
+    expect(result.appBytes, isNull);
+    expect(result.failedPaths, [root.path]);
+  });
 }

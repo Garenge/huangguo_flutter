@@ -9,9 +9,16 @@ import 'helpers/download_page_fixture.dart';
 
 class _StorageService extends StorageUsageService {
   int reads = 0;
+  int fullReads = 0;
 
   @override
   Future<StorageUsage> read(DownloadService downloads) async {
+    fullReads++;
+    return StorageUsage(appBytes: (fullReads + 3) * 1024 * 1024 * 1024);
+  }
+
+  @override
+  Future<StorageUsage> readDownloadUsage(DownloadService downloads) async {
     reads++;
     return StorageUsage(
       totalBytes: 256 * 1024 * 1024 * 1024,
@@ -28,6 +35,31 @@ class _StorageService extends StorageUsageService {
 
 void main() {
   testWidgets(
+    'app size scans on entry, not periodically, and syncs from management',
+    (tester) async {
+      final storage = _StorageService();
+      await mountDownloads(tester, storageUsageService: storage);
+      expect(storage.fullReads, 1);
+      await tester.pump(const Duration(seconds: 40));
+      expect(storage.fullReads, 1);
+      await tester.tap(find.text('App 占用'));
+      await tester.pumpAndSettle();
+      expect(find.text('App 空间管理'), findsOneWidget);
+      expect(find.text('5.00 GB'), findsOneWidget);
+      expect(storage.fullReads, 2);
+      await tester.tap(find.byTooltip('重新统计 App 占用'));
+      await tester.pumpAndSettle();
+      expect(storage.fullReads, 3);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('6.00 GB ›'), findsOneWidget);
+      await tester.tap(find.text('6.00 GB ›'));
+      await tester.pumpAndSettle();
+      expect(storage.fullReads, 4);
+    },
+  );
+
+  testWidgets(
     'storage remains fixed while scrolling and when search is empty',
     (tester) async {
       await mountDownloads(tester, storageUsageService: _StorageService());
@@ -35,7 +67,8 @@ void main() {
       final top = tester.getTopLeft(panel);
       expect(find.text('256.00 GB'), findsOneWidget);
       expect(find.text('192.00 GB'), findsOneWidget);
-      expect(find.text('4.00 GB'), findsOneWidget);
+      expect(find.text('4.00 GB ›'), findsOneWidget);
+      expect(find.text('4.00 GB'), findsNothing);
       await jumpDownloads(tester, 400);
       expect(tester.getTopLeft(panel), top);
       await tester.enterText(find.byType(TextField), '不存在');

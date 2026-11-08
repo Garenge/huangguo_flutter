@@ -29,6 +29,21 @@ class StorageUsageService {
       appBytes: files.appBytes,
       includesApplication: platform['includesApplication'] == true,
       albumBytes: files.albumBytes,
+      failedPaths: files.failedPaths,
+    );
+  }
+
+  /// 下载页仅扫描下载资源，不遍历应用本体、数据和缓存。
+  Future<StorageUsage> readDownloadUsage(DownloadService downloads) async {
+    final albums = _albumPaths(downloads);
+    final platform = await _platformUsage();
+    final files = await Isolate.run(
+      () => StorageFileScanner().scan([], albums),
+    );
+    return StorageUsage(
+      totalBytes: platform['totalBytes'] as int?,
+      availableBytes: platform['availableBytes'] as int?,
+      albumBytes: files.albumBytes,
     );
   }
 

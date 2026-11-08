@@ -47,6 +47,10 @@ void main() {
       expect(usage.usedBytes, 400);
       expect(usage.albumBytes['测试剧A (A)'], 200);
       expect(usage.includesApplication, isTrue);
+      final downloadUsage = await service.readDownloadUsage(downloads);
+      expect(downloadUsage.appBytes, isNull);
+      expect(downloadUsage.usedBytes, 400);
+      expect(downloadUsage.albumBytes['测试剧A (A)'], 200);
       File(tasks.first.filePath!).deleteSync();
       final updated = await service.read(downloads);
       expect(updated.albumBytes['测试剧A (A)'], 100);

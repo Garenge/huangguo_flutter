@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/storage_usage.dart';
+import '../pages/app_storage_page.dart';
 import '../services/download_storage_controller.dart';
 
 class DownloadStoragePanel extends StatelessWidget {
@@ -18,14 +19,14 @@ class DownloadStoragePanel extends StatelessWidget {
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
-            child: _content(),
+            child: _content(context),
           ),
         ),
       ),
     );
   }
 
-  Widget _content() {
+  Widget _content(BuildContext context) {
     final usage = controller.usage;
     final used = usage?.usedBytes;
     final total = usage?.totalBytes;
@@ -74,12 +75,60 @@ class DownloadStoragePanel extends StatelessWidget {
             children: [
               _metric('设备总空间', total),
               _metric('设备已用', used),
-              _metric(usage?.appLabel ?? 'App 占用', usage?.appBytes),
+              _appEntry(context),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _appEntry(BuildContext context) => Expanded(
+    child: InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => AppStoragePage(
+            downloads: controller.downloads,
+            service: controller.service,
+            onUsageChanged: controller.updateAppUsage,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'App 占用',
+              style: TextStyle(color: Colors.grey, fontSize: 11),
+            ),
+            const SizedBox(height: 3),
+            Tooltip(
+              message: _appHint,
+              child: Text(
+                _appValue,
+                style: const TextStyle(color: Colors.orange, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  String get _appValue {
+    final usage = controller.appUsage;
+    if (usage?.appBytes == null && controller.appRefreshing) return '统计中…';
+    final suffix = usage?.isPartial == true ? '（部分）' : '';
+    return '${formatStorageBytes(usage?.appBytes)}$suffix ›';
+  }
+
+  String get _appHint {
+    if (controller.appRefreshFailed && controller.appUsage?.appBytes != null) {
+      return '重新统计失败，保留上次结果；点击进入空间管理重试。';
+    }
+    return '按可读取文件大小估算，可能与系统设置不同；点击进入空间管理查看详情和重新统计。';
   }
 
   Widget _metric(String label, int? bytes) {

@@ -13,6 +13,10 @@ class DownloadStorageController extends ChangeNotifier {
   final DownloadService downloads;
   final StorageUsageService service;
   StorageUsage? usage;
+  StorageUsage? appUsage;
+  bool appRefreshing = false;
+  bool appRefreshFailed = false;
+  int _appRevision = 0;
   bool refreshing = false;
   bool _active = false;
   bool _disposed = false;
@@ -34,6 +38,7 @@ class DownloadStorageController extends ChangeNotifier {
     _changeTimer = null;
     if (!active) return;
     unawaited(refresh());
+    unawaited(refreshAppUsage());
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 20),
       (_) => refresh(),
@@ -69,7 +74,7 @@ class DownloadStorageController extends ChangeNotifier {
     refreshing = true;
     notifyListeners();
     try {
-      usage = await service.read(downloads);
+      usage = await service.readDownloadUsage(downloads);
     } catch (error, stack) {
       _log.e('refresh: 存储统计失败', error, stack);
       usage = const StorageUsage();
@@ -81,6 +86,33 @@ class DownloadStorageController extends ChangeNotifier {
         _dirty = false;
       }
     }
+  }
+
+  Future<void> refreshAppUsage() async {
+    if (_disposed || appRefreshing) return;
+    final revision = _appRevision;
+    appRefreshing = true;
+    appRefreshFailed = false;
+    notifyListeners();
+    try {
+      final result = await service.read(downloads);
+      if (!_disposed && revision == _appRevision) updateAppUsage(result);
+    } catch (error, stack) {
+      _log.e('refreshAppUsage: App 占用统计失败', error, stack);
+      if (!_disposed && revision == _appRevision) appRefreshFailed = true;
+    } finally {
+      appRefreshing = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// 管理页的较新结果优先于已下载页尚未完成的扫描。
+  void updateAppUsage(StorageUsage result) {
+    if (_disposed) return;
+    _appRevision++;
+    appRefreshFailed = result.appBytes == null;
+    if (!appRefreshFailed || appUsage == null) appUsage = result;
+    notifyListeners();
   }
 
   @override
