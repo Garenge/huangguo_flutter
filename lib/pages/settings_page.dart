@@ -14,6 +14,9 @@ import '../widgets/playback_settings_tile.dart';
 import '../widgets/gesture_lock_scope.dart';
 import '../widgets/gesture_settings_tile.dart';
 import '../widgets/app_notice.dart';
+import '../services/download_service.dart';
+import 'compression_test_page.dart';
+import '../widgets/playback_scope.dart';
 
 const _log = AppLog('SettingsPage');
 
@@ -23,6 +26,7 @@ class SettingsPage extends StatefulWidget {
   final SourceLoader? sourceLoader;
   final HuangguoApi? api;
   final SiteEndpointService? siteService;
+  final DownloadService? downloadService;
 
   const SettingsPage({
     super.key,
@@ -31,6 +35,7 @@ class SettingsPage extends StatefulWidget {
     this.sourceLoader,
     this.api,
     this.siteService,
+    this.downloadService,
   });
 
   @override
@@ -125,6 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.downloadService != null) _buildCompressionTestEntry(),
           if (GestureLockScope.maybeOf(context) case final service?)
             GestureSettingsTile(service: service),
           if (widget.playbackSettings != null)
@@ -223,6 +229,38 @@ class _SettingsPageState extends State<SettingsPage> {
         color: Colors.grey[400],
         fontSize: 13,
         fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _buildCompressionTestEntry() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.compress_rounded, color: Colors.orange),
+        title: const Text('压缩测试'),
+        subtitle: const Text('选择已下载剧集，对比压缩体积和画质'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: _openCompressionTest,
+      ),
+    );
+  }
+
+  void _openCompressionTest() {
+    final playback = PlaybackScope.maybeOf(context);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) {
+          final page = CompressionTestPage(
+            tasks: widget.downloadService!.completedTasks,
+          );
+          if (playback == null) return page;
+          return PlaybackScope(
+            settings: playback.settings,
+            coordinator: playback.coordinator,
+            onlineVisible: false,
+            child: page,
+          );
+        },
       ),
     );
   }

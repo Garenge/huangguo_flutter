@@ -346,6 +346,7 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildSettingsTab() {
     return SettingsPage(
+      downloadService: _downloadService,
       proxyService: _proxyService,
       playbackSettings: _playbackSettings,
       sourceLoader: _sourceLoader,
