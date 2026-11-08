@@ -27,6 +27,8 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 **/Pods/
+/ios/Podfile.lock
+/macos/Podfile.lock
 **/.gradle/
 .dart_tool/
 .flutter-plugins-dependencies
