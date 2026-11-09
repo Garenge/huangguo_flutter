@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../services/app_log.dart';
+import '../services/playback_window_title.dart';
 import 'video_player_surface.dart';
 import '../services/playback_session.dart';
 import 'playback_route_guard.dart';
@@ -11,6 +12,16 @@ import 'playback_route_guard.dart';
 class AppVideoPlayer extends StatefulWidget {
   final VideoPlayerController? controller;
   final String title;
+  final String? dramaName;
+
+  String get windowTitle {
+    final drama = dramaName?.trim() ?? '';
+    final episode = title.trim();
+    if (drama.isEmpty) return episode;
+    if (episode.isEmpty || episode == drama) return drama;
+    return '$drama · $episode';
+  }
+
   final PlaybackSession? session;
   final bool loading;
   final String? error;
@@ -23,6 +34,7 @@ class AppVideoPlayer extends StatefulWidget {
     super.key,
     required this.controller,
     required this.title,
+    this.dramaName,
     this.session,
     this.loading = false,
     this.error,
@@ -56,6 +68,9 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);
     }
+    if (_fullscreen && oldWidget.windowTitle != widget.windowTitle) {
+      PlaybackWindowTitle.update(widget.windowTitle);
+    }
     // The fullscreen route is a sibling, so notify it after this build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _source.value = widget;
@@ -65,6 +80,7 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
   @override
   void dispose() {
     widget.controller?.removeListener(_onControllerChanged);
+    if (_fullscreen) PlaybackWindowTitle.update(null);
     _source.dispose();
     super.dispose();
   }
@@ -136,6 +152,7 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
     if (_fullscreen) return;
     setState(() => _fullscreen = true);
     try {
+      await PlaybackWindowTitle.update(widget.windowTitle);
       await _setScreenMode(true);
       if (!mounted) return;
       final route = MaterialPageRoute<void>(builder: _buildFullscreen);
@@ -148,6 +165,7 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
       await closed;
     } finally {
       _fullscreenRoute = null;
+      await PlaybackWindowTitle.update(null);
       await _setScreenMode(false);
       if (mounted) setState(() => _fullscreen = false);
     }

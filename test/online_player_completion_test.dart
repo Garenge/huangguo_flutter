@@ -91,6 +91,7 @@ void main() {
     tester,
   ) async {
     await _mountOnlinePlayer(tester);
+    expect(_player(tester).windowTitle, '在线测试剧 · 第1集');
     final first = _player(tester).controller!;
     await tester.tap(find.byTooltip('全屏'));
     await pumpLocalPlayer(tester);

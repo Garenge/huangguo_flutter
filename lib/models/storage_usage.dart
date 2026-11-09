@@ -4,6 +4,7 @@ class StorageUsage {
   final int? appBytes;
   final bool includesApplication;
   final Map<String, int?> albumBytes;
+  final Map<String, int?> taskBytes;
   final List<String> failedPaths;
 
   const StorageUsage({
@@ -12,6 +13,7 @@ class StorageUsage {
     this.appBytes,
     this.includesApplication = false,
     this.albumBytes = const {},
+    this.taskBytes = const {},
     this.failedPaths = const [],
   });
 

@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 
 import '../services/app_log.dart';
 import 'playback_controls.dart';
+import 'playback_keyboard_shortcuts.dart';
 
 class VideoPlayerSurface extends StatefulWidget {
   final VideoPlayerController? controller;
@@ -513,6 +514,20 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
 
   @override
   Widget build(BuildContext context) {
+    return PlaybackKeyboardShortcuts(
+      controller: _controller,
+      enabled:
+          widget.active && _ready && !_menuOpen && !_seeking && !_fastForward,
+      onPlayPause: _playPause,
+      onSeek: () {
+        setState(() => _visible = true);
+        _scheduleHide();
+      },
+      child: _buildSurface(),
+    );
+  }
+
+  Widget _buildSurface() {
     return DefaultTextStyle(
       style: const TextStyle(color: Colors.white, fontSize: 12),
       child: ColoredBox(

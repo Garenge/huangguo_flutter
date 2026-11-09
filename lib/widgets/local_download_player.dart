@@ -1,13 +1,17 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../services/playback_session.dart';
 import '../services/playback_settings_service.dart';
 import '../services/playback_coordinator.dart';
+import '../services/app_log.dart';
 import 'playback_scope.dart';
 
 import '../models/download_task.dart';
+import '../models/storage_usage.dart';
+import '../services/storage_file_scanner.dart';
 import '../services/local_media_server.dart';
 import 'app_video_player.dart';
 import 'library_scope.dart';
@@ -18,11 +22,13 @@ import '../services/library_service.dart';
 class LocalDownloadPlayer extends StatefulWidget {
   final List<DownloadTask> tasks;
   final DownloadTask initialTask;
+  final Future<void> Function(DownloadTask task)? onDelete;
 
   const LocalDownloadPlayer({
     super.key,
     required this.tasks,
     required this.initialTask,
+    this.onDelete,
   });
 
   @override
@@ -37,6 +43,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   PlaybackSettingsService? _ownedSettings;
   late List<DownloadTask> _tasks;
   late DownloadTask _currentTask;
+  late final Future<Map<String, int?>> _taskSizes;
   bool _loading = true;
   bool _autoPlay = true;
   bool _completionHandled = false;
@@ -50,11 +57,32 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   void initState() {
     super.initState();
     _tasks = widget.tasks.where(_hasResource).toList();
+    _taskSizes = _readTaskSizes();
     _currentTask = _tasks.firstWhere(
       (task) => task.id == widget.initialTask.id,
       orElse: () => _tasks.first,
     );
   }
+
+  Future<Map<String, int?>> _readTaskSizes() async {
+    final paths = {for (final task in _tasks) task.id: _resourcePaths(task)};
+    try {
+      return await Isolate.run(
+        () => StorageFileScanner().scan([], {}, tasks: paths).taskBytes,
+      );
+    } catch (error, stack) {
+      const AppLog(
+        'local_download_player.dart',
+      ).e('_readTaskSizes: 统计本地剧集大小失败', error, stack);
+      return {};
+    }
+  }
+
+  List<String> _resourcePaths(DownloadTask task) => [
+    if (task.filePath case final String path when path.isNotEmpty)
+      File(path).parent.path,
+    if (task.mp4Path case final String path when path.isNotEmpty) path,
+  ];
 
   @override
   void didChangeDependencies() {
@@ -205,6 +233,83 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     _loadCurrentTask();
   }
 
+  Future<void> _deleteTask(DownloadTask task) async {
+    final deletingCurrent = task.id == _currentTask.id;
+    final deletedIndex = _tasks.indexWhere((item) => item.id == task.id);
+    if (deletedIndex < 0) return;
+
+    DownloadTask? nextTask;
+    if (deletingCurrent) {
+      nextTask = deletedIndex + 1 < _tasks.length
+          ? _tasks[deletedIndex + 1]
+          : deletedIndex > 0
+          ? _tasks[deletedIndex - 1]
+          : null;
+      await _stopCurrentController();
+    }
+
+    try {
+      await widget.onDelete?.call(task);
+    } catch (error, stack) {
+      const AppLog(
+        'local_download_player.dart',
+      ).e('_deleteTask: 删除文件失败', error, stack);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
+        if (deletingCurrent) await _loadCurrentTask();
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _tasks.removeAt(deletedIndex));
+    if (!deletingCurrent) return;
+    if (nextTask == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _currentTask = nextTask!);
+    await _loadCurrentTask();
+  }
+
+  Future<void> _stopCurrentController() async {
+    _loadGeneration++;
+    final previous = _controller;
+    previous?.removeListener(_onControllerChanged);
+    _controller = null;
+    _session?.controller = null;
+    await previous?.pause();
+    await previous?.dispose();
+    _server.stop();
+  }
+
+  Future<void> _confirmDeleteTask(DownloadTask task) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        title: const Text('删除文件', style: TextStyle(color: Colors.white)),
+        content: Text(
+          '确定要删除「${task.episodeName}」吗？\n文件将被永久删除。',
+          style: TextStyle(color: Colors.grey[300]),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete == true && mounted) await _deleteTask(task);
+  }
+
   @override
   Widget build(BuildContext context) {
     final index = _currentIndex;
@@ -226,6 +331,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
               controller: _controller,
               session: _session,
               title: _currentTask.episodeName,
+              dramaName: _currentTask.dramaName,
               loading: _loading,
               error: _error,
               onRetry: _loadCurrentTask,
@@ -299,24 +405,53 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
         isSelected ? Icons.play_circle_filled : Icons.video_file_outlined,
         color: isSelected ? Colors.orange : Colors.grey,
       ),
-      title: Text(
-        task.episodeName,
-        style: TextStyle(
-          color: isSelected
-              ? Colors.orange
-              : watched
-              ? Colors.white38
-              : Colors.white70,
-        ),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              task.episodeName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isSelected
+                    ? Colors.orange
+                    : watched
+                    ? Colors.white38
+                    : Colors.white70,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _buildTaskSize(task),
+        ],
       ),
       subtitle: watched
           ? const Text('看过', style: TextStyle(color: Colors.white38))
           : null,
-      trailing: Text(
-        '${index + 1}',
-        style: const TextStyle(color: Colors.grey),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${index + 1}', style: const TextStyle(color: Colors.grey)),
+          IconButton(
+            tooltip: '删除本地文件',
+            icon: const Icon(Icons.delete_outline, color: Colors.white54),
+            onPressed: () => _confirmDeleteTask(task),
+          ),
+        ],
       ),
       onTap: () => _selectTask(task),
+    );
+  }
+
+  Widget _buildTaskSize(DownloadTask task) {
+    return FutureBuilder<Map<String, int?>>(
+      future: _taskSizes,
+      builder: (_, snapshot) => Text(
+        snapshot.connectionState == ConnectionState.done
+            ? formatStorageBytes(snapshot.data?[task.id])
+            : '统计中…',
+        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      ),
     );
   }
 }

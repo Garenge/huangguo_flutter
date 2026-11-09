@@ -1,14 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huangguo_flutter/widgets/app_video_player.dart';
+import 'package:huangguo_flutter/widgets/local_download_player.dart';
 
 import 'helpers/local_download_player_fixture.dart';
 
 void main() {
+  testWidgets('local episodes show resource size after the episode name', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester, taskCount: 2);
+    final firstSize = find.descendant(
+      of: localEpisode('本地第1集'),
+      matching: find.text('1 B'),
+    );
+    expect(firstSize, findsOneWidget);
+    expect(
+      tester.getTopLeft(firstSize).dx,
+      greaterThan(tester.getTopLeft(find.text('本地第1集').last).dx),
+    );
+    await tester.tap(localEpisode('本地第2集'));
+    await pumpLocalPlayer(tester);
+    expect(find.text('1 B'), findsNWidgets(2));
+    expect(localPlayer(tester).controller!.value.isPlaying, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('scrolling episodes leaves the playing video fixed', (
     tester,
   ) async {
     await mountLocalDownloads(tester);
+    expect(localPlayer(tester).windowTitle, '本地测试剧 · 本地第1集');
     final bounds = tester.getRect(find.byType(AppVideoPlayer));
     final controller = localPlayer(tester).controller!;
     expect(controller.value.isPlaying, isTrue);
@@ -30,6 +52,7 @@ void main() {
     await tester.tap(localEpisode('本地第15集'));
     await pumpLocalPlayer(tester);
     expect(localPlayer(tester).title, '本地第15集');
+    expect(localPlayer(tester).windowTitle, '本地测试剧 · 本地第15集');
     expect(
       localPlayer(tester).loading,
       isFalse,
@@ -157,4 +180,60 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('deleting a non-playing episode refreshes the list only', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester);
+    final controller = localPlayer(tester).controller!;
+    await tester.scrollUntilVisible(localEpisode('本地第15集'), 200);
+    final episode = localEpisode('本地第15集');
+    await tester.tap(
+      find.descendant(of: episode, matching: find.byTooltip('删除本地文件')),
+    );
+    await tester.pump();
+    await tester.tap(find.text('删除').last);
+    await pumpLocalPlayer(tester);
+
+    expect(find.text('本地第15集'), findsNothing);
+    expect(localPlayer(tester).title, '本地第1集');
+    expect(localPlayer(tester).controller, same(controller));
+    expect(controller.value.isPlaying, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('deleting the playing episode starts the next episode', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester);
+    final episode = localEpisode('本地第1集');
+    await tester.tap(
+      find.descendant(of: episode, matching: find.byTooltip('删除本地文件')),
+    );
+    await tester.pump();
+    await tester.tap(find.text('删除').last);
+    await pumpLocalPlayer(tester);
+
+    expect(localPlayer(tester).title, '本地第2集');
+    expect(localPlayer(tester).controller!.value.isPlaying, isTrue);
+    expect(find.text('本地第1集'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('deleting the only episode returns to the previous page', (
+    tester,
+  ) async {
+    await mountLocalDownloads(tester, taskCount: 1);
+    final episode = localEpisode('本地第1集');
+    await tester.tap(
+      find.descendant(of: episode, matching: find.byTooltip('删除本地文件')),
+    );
+    await tester.pump();
+    await tester.tap(find.text('删除').last);
+    await pumpLocalPlayer(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LocalDownloadPlayer), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

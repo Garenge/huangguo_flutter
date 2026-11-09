@@ -570,9 +570,12 @@ class _DownloadPageState extends State<DownloadPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey[850],
         title: const Text('删除整套文件', style: TextStyle(color: Colors.white)),
-        content: Text(
-          '确定删除「${tasks.first.dramaName}」的 ${tasks.length} 集已下载文件吗？\n文件将被永久删除。',
-          style: TextStyle(color: Colors.grey[300]),
+        content: _buildStorageText(
+          (usage) =>
+              '确定删除「${tasks.first.dramaName}」的 ${tasks.length} 集已下载文件吗？\n'
+              '文件占用：${_storageSize(_tasksBytes(usage, tasks))}\n'
+              '文件将被永久删除。',
+          color: Colors.grey[300],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
@@ -601,7 +604,10 @@ class _DownloadPageState extends State<DownloadPage>
         contentPadding: const EdgeInsets.only(left: 16, right: 4),
         minLeadingWidth: 20,
         horizontalTitleGap: 8,
-        subtitle: watched ? const Text('看过', style: TextStyle(color: Colors.white38)) : null,
+        subtitle: _buildStorageText(
+          (usage) =>
+              '${watched ? '看过 · ' : ''}${_storageSize(usage?.taskBytes[task.id])}',
+        ),
         leading: Icon(
           hasMp4 ? Icons.video_file : Icons.play_circle_outline,
           color: Colors.green,
@@ -625,6 +631,36 @@ class _DownloadPageState extends State<DownloadPage>
           ],
         ),
         trailing: _buildCompletedTaskActions(task, hasMp4),
+      ),
+    );
+  }
+
+  String _storageSize(int? bytes) {
+    if (_storageController.usage == null && _storageController.refreshing) {
+      return '统计中…';
+    }
+    return formatStorageBytes(bytes);
+  }
+
+  int? _tasksBytes(StorageUsage? usage, List<DownloadTask> tasks) {
+    var total = 0;
+    for (final task in tasks) {
+      final bytes = usage?.taskBytes[task.id];
+      if (bytes == null) return null;
+      total += bytes;
+    }
+    return total;
+  }
+
+  Widget _buildStorageText(
+    String Function(StorageUsage? usage) text, {
+    Color? color,
+  }) {
+    return ListenableBuilder(
+      listenable: _storageController,
+      builder: (_, _) => Text(
+        text(_storageController.usage),
+        style: TextStyle(color: color ?? Colors.white38),
       ),
     );
   }
@@ -1023,9 +1059,12 @@ class _DownloadPageState extends State<DownloadPage>
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.grey[850],
         title: const Text('删除文件', style: TextStyle(color: Colors.white)),
-        content: Text(
-          '确定要删除「${task.dramaName} - ${task.episodeName}」吗？\n文件将被永久删除。',
-          style: TextStyle(color: Colors.grey[300]),
+        content: _buildStorageText(
+          (usage) =>
+              '确定要删除「${task.dramaName} - ${task.episodeName}」吗？\n'
+              '文件占用：${_storageSize(usage?.taskBytes[task.id])}\n'
+              '文件将被永久删除。',
+          color: Colors.grey[300],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
@@ -1057,7 +1096,11 @@ class _DownloadPageState extends State<DownloadPage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => LocalDownloadPlayer(tasks: tasks, initialTask: task),
+        builder: (_) => LocalDownloadPlayer(
+          tasks: tasks,
+          initialTask: task,
+          onDelete: (task) => _ds.deleteCompletedFile(task.id),
+        ),
       ),
     );
   }

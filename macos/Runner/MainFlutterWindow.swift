@@ -2,6 +2,8 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
+  private var playbackOriginalTitle: String?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -10,8 +12,33 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     registerStorageUsage(flutterViewController)
+    registerPlaybackWindow(flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func registerPlaybackWindow(_ controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "huangguo/playback_window", binaryMessenger: controller.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "setPlaybackTitle" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self?.setPlaybackTitle(call.arguments as? String)
+      result(nil)
+    }
+  }
+
+  private func setPlaybackTitle(_ videoTitle: String?) {
+    if let videoTitle = videoTitle {
+      if playbackOriginalTitle == nil { playbackOriginalTitle = title }
+      title = videoTitle.isEmpty ? playbackOriginalTitle ?? title : videoTitle
+    } else if let original = playbackOriginalTitle {
+      title = original
+      playbackOriginalTitle = nil
+    }
   }
 
   private func registerStorageUsage(_ controller: FlutterViewController) {

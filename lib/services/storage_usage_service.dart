@@ -16,12 +16,13 @@ class StorageUsageService {
 
   Future<StorageUsage> read(DownloadService downloads) async {
     final albums = _albumPaths(downloads);
+    final tasks = _taskPaths(downloads);
     final platform = await _platformUsage();
     final roots =
         (platform['appRoots'] as List?)?.cast<String>() ??
         await _dataRoots(downloads.downloadRoot);
     final files = await Isolate.run(
-      () => StorageFileScanner().scan(roots, albums),
+      () => StorageFileScanner().scan(roots, albums, tasks: tasks),
     );
     return StorageUsage(
       totalBytes: platform['totalBytes'] as int?,
@@ -29,6 +30,7 @@ class StorageUsageService {
       appBytes: files.appBytes,
       includesApplication: platform['includesApplication'] == true,
       albumBytes: files.albumBytes,
+      taskBytes: files.taskBytes,
       failedPaths: files.failedPaths,
     );
   }
@@ -36,33 +38,39 @@ class StorageUsageService {
   /// 下载页仅扫描下载资源，不遍历应用本体、数据和缓存。
   Future<StorageUsage> readDownloadUsage(DownloadService downloads) async {
     final albums = _albumPaths(downloads);
+    final tasks = _taskPaths(downloads);
     final platform = await _platformUsage();
     final files = await Isolate.run(
-      () => StorageFileScanner().scan([], albums),
+      () => StorageFileScanner().scan([], albums, tasks: tasks),
     );
     return StorageUsage(
       totalBytes: platform['totalBytes'] as int?,
       availableBytes: platform['availableBytes'] as int?,
       albumBytes: files.albumBytes,
+      taskBytes: files.taskBytes,
     );
   }
 
   Map<String, List<String>> _albumPaths(DownloadService downloads) {
     final albums = <String, List<String>>{};
+    final tasks = _taskPaths(downloads);
     for (final task in downloads.completedTasks) {
       final key = '${task.dramaName} (${task.dramaId})';
-      final paths = albums.putIfAbsent(key, () => []);
-      // 未初始化的测试服务没有下载根目录，不能解析为当前工作目录。
-      if ((task.filePath?.isNotEmpty ?? false) ||
-          downloads.downloadRoot.isNotEmpty) {
-        paths.add(downloads.episodeDirectoryFor(task));
-      }
-      if (task.mp4Path case final String path when path.isNotEmpty) {
-        paths.add(path);
-      }
+      albums.putIfAbsent(key, () => []).addAll(tasks[task.id]!);
     }
     return albums;
   }
+
+  Map<String, List<String>> _taskPaths(DownloadService downloads) => {
+    for (final task in downloads.completedTasks)
+      task.id: [
+        // 未初始化的测试服务没有下载根目录，不能解析为当前工作目录。
+        if ((task.filePath?.isNotEmpty ?? false) ||
+            downloads.downloadRoot.isNotEmpty)
+          downloads.episodeDirectoryFor(task),
+        if (task.mp4Path case final String path when path.isNotEmpty) path,
+      ],
+  };
 
   Future<Map<Object?, Object?>> _platformUsage() async {
     try {

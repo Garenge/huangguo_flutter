@@ -27,9 +27,14 @@ void main() {
       {
         'album': [episode, '$episode/video.mp4', '$episode/../ep2'],
       },
+      tasks: {
+        'ep1': [episode, '$episode/video.mp4'],
+        'ep2': ['$episode/../ep2'],
+      },
     );
     expect(result.appBytes, 400);
     expect(result.albumBytes['album'], 350);
+    expect(result.taskBytes, {'ep1': 200, 'ep2': 150});
   });
 
   test('missing files count as zero and symlinks are not followed', () {
@@ -101,9 +106,14 @@ void main() {
       {
         'album': [root.path],
       },
+      tasks: {
+        'readable': ['${root.path}/readable'],
+        'blocked': [blocked],
+      },
     );
     expect(result.appBytes, 70);
     expect(result.albumBytes['album'], isNull);
+    expect(result.taskBytes, {'readable': 70, 'blocked': null});
     expect(result.failedPaths, [blocked]);
   });
 

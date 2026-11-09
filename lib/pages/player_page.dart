@@ -531,6 +531,7 @@ class _PlayerPageState extends State<PlayerPage> {
         controller: _controller,
         session: _session,
         title: _currentEp?.name ?? '播放器',
+        dramaName: widget.dramaName ?? widget.drama?.name,
         loading: _isLoading,
         error: _errorMessage,
         onRetry: _resolveAndPlay,

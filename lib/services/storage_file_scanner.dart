@@ -18,8 +18,17 @@ class StorageFileScanner {
   static List<FileSystemEntity> _children(String path) =>
       Directory(path).listSync(followLinks: false);
 
-  ({int? appBytes, Map<String, int?> albumBytes, List<String> failedPaths})
-  scan(List<String> appRoots, Map<String, List<String>> albums) {
+  ({
+    int? appBytes,
+    Map<String, int?> albumBytes,
+    Map<String, int?> taskBytes,
+    List<String> failedPaths,
+  })
+  scan(
+    List<String> appRoots,
+    Map<String, List<String>> albums, {
+    Map<String, List<String>> tasks = const {},
+  }) {
     final roots = appRoots.map(_normalize).toSet();
     for (final root in roots) {
       _visit(root);
@@ -31,19 +40,26 @@ class StorageFileScanner {
     final appBytes = roots.isEmpty || (!readable && failedPaths.isNotEmpty)
         ? null
         : _sum(roots, allowPartial: true);
-    final albumBytes = <String, int?>{};
-    for (final album in albums.entries) {
-      final paths = album.value.map(_normalize).toSet();
-      for (final path in paths) {
-        _visit(path);
-      }
-      albumBytes[album.key] = _sum(paths);
-    }
+    final albumBytes = _scanGroups(albums);
+    final taskBytes = _scanGroups(tasks);
     return (
       appBytes: appBytes,
       albumBytes: albumBytes,
+      taskBytes: taskBytes,
       failedPaths: failedPaths,
     );
+  }
+
+  Map<String, int?> _scanGroups(Map<String, List<String>> groups) {
+    final sizes = <String, int?>{};
+    for (final group in groups.entries) {
+      final paths = group.value.map(_normalize).toSet();
+      for (final path in paths) {
+        _visit(path);
+      }
+      sizes[group.key] = _sum(paths);
+    }
+    return sizes;
   }
 
   String _normalize(String path) =>

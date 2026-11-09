@@ -20,6 +20,8 @@ import 'package:huangguo_flutter/widgets/library_scope.dart';
 Future<void> mountLocalDownloads(
   WidgetTester tester, {
   LibraryService? library,
+  int taskCount = 40,
+  int initialIndex = 0,
 }) async {
   tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
     SystemChannels.platform,
@@ -30,7 +32,8 @@ Future<void> mountLocalDownloads(
   final directory = await tester.runAsync(
     () => Directory.systemTemp.createTemp('local_download_player_test_'),
   );
-  final path = '${directory!.path}/episode.mp4';
+  final path = '${directory!.path}/episode/episode.mp4';
+  File(path).parent.createSync(recursive: true);
   File(path).writeAsBytesSync([0]);
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox());
@@ -44,13 +47,16 @@ Future<void> mountLocalDownloads(
   });
   final settings = PlaybackSettingsService(directory: directory);
   await tester.runAsync(settings.load);
-  final tasks = List.generate(40, (index) => _localTask(index, path));
+  final tasks = List.generate(taskCount, (index) => _localTask(index, path));
   final content = MaterialApp(
     home: PlaybackScope(
       settings: settings,
       coordinator: PlaybackCoordinator(),
       onlineVisible: false,
-      child: LocalDownloadPlayer(tasks: tasks, initialTask: tasks.first),
+      child: LocalDownloadPlayer(
+        tasks: tasks,
+        initialTask: tasks[initialIndex],
+      ),
     ),
   );
   await tester.pumpWidget(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huangguo_flutter/models/storage_usage.dart';
@@ -10,6 +12,7 @@ import 'helpers/download_page_fixture.dart';
 class _StorageService extends StorageUsageService {
   int reads = 0;
   int fullReads = 0;
+  Completer<StorageUsage>? pending;
 
   @override
   Future<StorageUsage> read(DownloadService downloads) async {
@@ -20,6 +23,7 @@ class _StorageService extends StorageUsageService {
   @override
   Future<StorageUsage> readDownloadUsage(DownloadService downloads) async {
     reads++;
+    if (pending != null) return pending!.future;
     return StorageUsage(
       totalBytes: 256 * 1024 * 1024 * 1024,
       availableBytes: 64 * 1024 * 1024 * 1024,
@@ -29,11 +33,78 @@ class _StorageService extends StorageUsageService {
         for (final task in downloads.completedTasks)
           '${task.dramaName} (${task.dramaId})': 2 * 1024 * 1024 * 1024,
       },
+      taskBytes: {
+        for (final task in downloads.completedTasks) task.id: 128 * 1024 * 1024,
+      },
     );
   }
 }
 
 void main() {
+  testWidgets('episode and album deletion show the affected resource sizes', (
+    tester,
+  ) async {
+    await mountDownloads(
+      tester,
+      tasks: albumTasks('A', 2),
+      storageUsageService: _StorageService(),
+    );
+    expect(find.text('128.00 MB'), findsNWidgets(2));
+    await tester.tap(find.byTooltip('删除文件').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.textContaining('文件占用：128.00 MB'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除整套'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('文件占用：256.00 MB'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pending scan updates both episode size and an open dialog', (
+    tester,
+  ) async {
+    final storage = _StorageService()..pending = Completer<StorageUsage>();
+    await mountDownloads(
+      tester,
+      tasks: albumTasks('A', 1),
+      storageUsageService: storage,
+    );
+    expect(find.text('统计中…'), findsWidgets);
+    await tester.tap(find.byTooltip('删除文件'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('文件占用：统计中…'), findsOneWidget);
+    storage.pending!.complete(const StorageUsage(taskBytes: {'A-0': 1536}));
+    await tester.pumpAndSettle();
+    expect(find.text('1.50 KB'), findsOneWidget);
+    expect(find.textContaining('文件占用：1.50 KB'), findsOneWidget);
+  });
+
+  testWidgets('missing size stays unavailable and is not shown as zero', (
+    tester,
+  ) async {
+    final storage = _StorageService()
+      ..pending = (Completer<StorageUsage>()..complete(const StorageUsage()));
+    await mountDownloads(
+      tester,
+      tasks: albumTasks('A', 1),
+      storageUsageService: storage,
+    );
+    expect(find.text('暂不可用'), findsWidgets);
+    await tester.tap(find.byTooltip('删除文件'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('文件占用：暂不可用'), findsOneWidget);
+    expect(find.textContaining('文件占用：0 B'), findsNothing);
+  });
+
   testWidgets(
     'app size scans on entry, not periodically, and syncs from management',
     (tester) async {
