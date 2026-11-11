@@ -49,6 +49,7 @@ Future<void> mountLocalDownloads(
   await tester.runAsync(settings.load);
   final tasks = List.generate(taskCount, (index) => _localTask(index, path));
   final content = MaterialApp(
+    theme: ThemeData(platform: TargetPlatform.macOS),
     home: PlaybackScope(
       settings: settings,
       coordinator: PlaybackCoordinator(),

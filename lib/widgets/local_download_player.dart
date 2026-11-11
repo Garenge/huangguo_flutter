@@ -14,6 +14,7 @@ import '../models/storage_usage.dart';
 import '../services/storage_file_scanner.dart';
 import '../services/local_media_server.dart';
 import 'app_video_player.dart';
+import 'player_layout.dart';
 import 'library_scope.dart';
 import 'watch_progress.dart';
 import '../services/library_service.dart';
@@ -323,27 +324,29 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
         ),
         backgroundColor: Colors.black,
       ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 240,
-            child: AppVideoPlayer(
-              controller: _controller,
-              session: _session,
-              title: _currentTask.episodeName,
-              dramaName: _currentTask.dramaName,
-              loading: _loading,
-              error: _error,
-              onRetry: _loadCurrentTask,
-              onBack: () => Navigator.of(context).pop(),
-              onPrevious: index > 0 ? _playPrevious : null,
-              onNext: index >= 0 && index < _tasks.length - 1
-                  ? _playNext
-                  : null,
+      body: PlayerLayout(
+        builder: (context, playerHeight) => Column(
+          children: [
+            SizedBox(
+              height: playerHeight,
+              child: AppVideoPlayer(
+                controller: _controller,
+                session: _session,
+                title: _currentTask.episodeName,
+                dramaName: _currentTask.dramaName,
+                loading: _loading,
+                error: _error,
+                onRetry: _loadCurrentTask,
+                onBack: () => Navigator.of(context).pop(),
+                onPrevious: index > 0 ? _playPrevious : null,
+                onNext: index >= 0 && index < _tasks.length - 1
+                    ? _playNext
+                    : null,
+              ),
             ),
-          ),
-          Expanded(child: _buildEpisodeList()),
-        ],
+            Expanded(child: _buildEpisodeList()),
+          ],
+        ),
       ),
     );
   }

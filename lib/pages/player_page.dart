@@ -17,6 +17,7 @@ import '../services/playback_history_service.dart';
 import '../services/app_log.dart';
 import '../widgets/episode_grid.dart';
 import '../widgets/app_video_player.dart';
+import '../widgets/player_layout.dart';
 import '../widgets/library_scope.dart';
 import '../widgets/favorite_button.dart';
 import '../widgets/player_download_button.dart';
@@ -74,7 +75,6 @@ class _PlayerPageState extends State<PlayerPage> {
   int _loadGeneration = 0;
   bool _completionHandled = false;
   Duration? _pendingStartPosition;
-  static const double _playerHeight = 240.0;
 
   // 历史记录
   Timer? _saveTimer;
@@ -504,29 +504,31 @@ class _PlayerPageState extends State<PlayerPage> {
           ),
         ],
       ),
-      body: ListView(
-        children: [
-          _buildPlayer(),
-          if (_streamUrl != null && !_isLoading) _buildStreamInfo(),
-          _buildEpisodeList(),
-          if (widget.historyService != null)
-            _HistorySection(
-              historyService: widget.historyService!,
-              api: widget.api,
-              htmlParser: widget.htmlParser,
-              onPlayEntry: (entry) {
-                widget.onPlayFromHistory?.call(entry);
-              },
-              onViewAll: _showHistory,
-            ),
-        ],
+      body: PlayerLayout(
+        builder: (context, playerHeight) => ListView(
+          children: [
+            _buildPlayer(playerHeight),
+            if (_streamUrl != null && !_isLoading) _buildStreamInfo(),
+            _buildEpisodeList(),
+            if (widget.historyService != null)
+              _HistorySection(
+                historyService: widget.historyService!,
+                api: widget.api,
+                htmlParser: widget.htmlParser,
+                onPlayEntry: (entry) {
+                  widget.onPlayFromHistory?.call(entry);
+                },
+                onViewAll: _showHistory,
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildPlayer() {
+  Widget _buildPlayer(double height) {
     return SizedBox(
-      height: _playerHeight,
+      height: height,
       child: AppVideoPlayer(
         controller: _controller,
         session: _session,
