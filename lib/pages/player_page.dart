@@ -24,6 +24,8 @@ import '../widgets/player_download_button.dart';
 import '../widgets/app_notice.dart';
 import '../widgets/watch_progress.dart';
 import '../services/library_service.dart';
+import '../services/local_playback_source.dart';
+import '../widgets/playback_source_info.dart';
 
 const _log = AppLog('PlayerPage');
 
@@ -31,6 +33,7 @@ class PlayerPage extends StatefulWidget {
   final HuangguoApi api;
   final HtmlParser htmlParser;
   final Episode? initialEpisode;
+  final int playbackRequestId;
   final List<Episode> allEpisodes;
   final DownloadService? downloadService;
   final PlaybackHistoryService? historyService;
@@ -45,6 +48,7 @@ class PlayerPage extends StatefulWidget {
     required this.api,
     required this.htmlParser,
     this.initialEpisode,
+    this.playbackRequestId = 0,
     this.allEpisodes = const [],
     this.downloadService,
     this.historyService,
@@ -68,6 +72,8 @@ class _PlayerPageState extends State<PlayerPage> {
   PlaybackSession? _session;
   PlaybackSettingsService? _ownedSettings;
   String? _streamUrl;
+  LocalPlaybackSource? _localSource;
+  bool _usingLocal = false;
   bool _isLoading = false;
   String? _errorMessage;
   bool _autoPlay = true;
@@ -101,9 +107,13 @@ class _PlayerPageState extends State<PlayerPage> {
     super.didUpdateWidget(oldWidget);
     if (widget.initialEpisode != null &&
         (widget.initialEpisode != oldWidget.initialEpisode ||
+            widget.playbackRequestId != oldWidget.playbackRequestId ||
             widget.startPosition != oldWidget.startPosition ||
             widget.dramaId != oldWidget.dramaId)) {
-      _log.i('didUpdateWidget: new episode ${widget.initialEpisode!.name}');
+      _log.i(
+        'player_page.dart didUpdateWidget: 收到播放请求 '
+        'id=${widget.playbackRequestId}, ep=${widget.initialEpisode!.ep}',
+      );
       _saveHistory(source: oldWidget);
       _pendingStartPosition = widget.startPosition;
       _currentEp = widget.initialEpisode;
@@ -144,6 +154,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _saveHistory();
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
+    _localSource?.dispose();
     super.dispose();
   }
 
@@ -206,11 +217,15 @@ class _PlayerPageState extends State<PlayerPage> {
 
   // ----- 解析与播放 -----
 
-  Future<void> _resolveAndPlay() async {
+  Future<void> _resolveAndPlay({bool onlineOnly = false}) async {
     final episode = _currentEp;
     if (episode == null) return;
+    // 主动选集与切换标签页可在同一帧发生，开始新会话前使用最新可见状态。
+    _session!.setVisible(PlaybackScope.maybeOf(context)?.onlineVisible ?? true);
     final generation = ++_loadGeneration;
     final previous = _controller;
+    final previousSource = _localSource;
+    _localSource = null;
     _stopSaveTimer();
     previous?.removeListener(_onControllerChanged);
     setState(() {
@@ -218,27 +233,26 @@ class _PlayerPageState extends State<PlayerPage> {
       _isLoading = true;
       _errorMessage = null;
       _streamUrl = null;
+      _usingLocal = false;
       _completionHandled = false;
     });
     _session!.controller = null;
     await _session!.begin();
-    await _loadEpisode(episode, generation, previous);
+    await previous?.dispose();
+    previousSource?.dispose();
+    if (!mounted || generation != _loadGeneration) return;
+    await _loadEpisode(episode, generation, onlineOnly: onlineOnly);
   }
 
   Future<void> _loadEpisode(
     Episode episode,
-    int generation,
-    VideoPlayerController? previous,
-  ) async {
+    int generation, {
+    required bool onlineOnly,
+  }) async {
     VideoPlayerController? candidate;
     try {
-      await previous?.dispose();
-      final url = await _resolver!.resolveStream(episode);
-      if (!mounted || generation != _loadGeneration) return;
-      candidate = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: _resolver!.streamHeaders,
-      );
+      candidate = await _createController(episode, generation, onlineOnly);
+      if (candidate == null) return;
       await candidate.initialize();
       if (!mounted || generation != _loadGeneration) {
         await candidate.dispose();
@@ -254,7 +268,7 @@ class _PlayerPageState extends State<PlayerPage> {
         await candidate.dispose();
         return;
       }
-      _attachController(candidate, url);
+      _attachController(candidate);
       if (mounted && generation == _loadGeneration) await _session!.play();
     } catch (error, stack) {
       if (candidate != null && candidate != _controller) {
@@ -269,6 +283,49 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
+  Future<VideoPlayerController?> _createController(
+    Episode episode,
+    int generation,
+    bool onlineOnly,
+  ) async {
+    final source = onlineOnly
+        ? null
+        : LocalPlaybackSource.forEpisode(
+            widget.downloadService,
+            widget.dramaId ?? widget.drama?.id,
+            episode.ep,
+            episodeUrl: episode.url,
+            episodeName: episode.name,
+          );
+    _localSource = source;
+    if (source != null) {
+      _log.i(
+        'player_page.dart _createController: 使用本地资源 ep=${episode.ep}, path=${source.path}',
+      );
+      setState(() => _usingLocal = true);
+      return source.createController();
+    }
+    _log.i(
+      'player_page.dart _createController: 使用在线播放 ep=${episode.ep}, onlineOnly=$onlineOnly',
+    );
+    final url = await _resolver!.resolveStream(episode);
+    if (!mounted || generation != _loadGeneration) return null;
+    _streamUrl = url;
+    return VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      httpHeaders: _resolver!.streamHeaders,
+    );
+  }
+
+  void _useOnline() {
+    final position = _controller?.value.position;
+    if (position != null && position > Duration.zero) {
+      _pendingStartPosition = position;
+    }
+    _saveHistory();
+    _resolveAndPlay(onlineOnly: true);
+  }
+
   Future<void> _restorePosition(VideoPlayerController controller) async {
     final position = _pendingStartPosition;
     final duration = controller.value.duration;
@@ -278,10 +335,9 @@ class _PlayerPageState extends State<PlayerPage> {
     await controller.seekTo(position);
   }
 
-  void _attachController(VideoPlayerController controller, String url) {
+  void _attachController(VideoPlayerController controller) {
     setState(() {
       _controller = controller;
-      _streamUrl = url;
       _isLoading = false;
       _pendingStartPosition = null;
     });
@@ -291,6 +347,15 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _onControllerChanged() {
     final value = _controller?.value;
+    if (_usingLocal && value?.hasError == true && _errorMessage == null) {
+      _log.e(
+        'player_page.dart _onControllerChanged: 本地播放失败',
+        value!.errorDescription,
+      );
+      _pendingStartPosition = value.position;
+      _stopSaveTimer();
+      setState(() => _errorMessage = '本地播放失败：${value.errorDescription}');
+    }
     if (value == null || value.duration <= Duration.zero || value.hasError) {
       return;
     }
@@ -349,9 +414,12 @@ class _PlayerPageState extends State<PlayerPage> {
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
     _controller = null;
+    _localSource?.dispose();
+    _localSource = null;
     setState(() {
       _currentEp = null;
       _streamUrl = null;
+      _usingLocal = false;
       _isLoading = false;
       _errorMessage = null;
     });
@@ -508,7 +576,15 @@ class _PlayerPageState extends State<PlayerPage> {
         builder: (context, playerHeight) => ListView(
           children: [
             _buildPlayer(playerHeight),
-            if (_streamUrl != null && !_isLoading) _buildStreamInfo(),
+            if (!_isLoading && (_usingLocal || _streamUrl != null))
+              PlaybackSourceInfo(
+                local: _usingLocal,
+                url: _usingLocal ? null : _streamUrl,
+                onCopy: _copyStreamUrl,
+                onUseOnline: _usingLocal && _errorMessage != null
+                    ? _useOnline
+                    : null,
+              ),
             _buildEpisodeList(),
             if (widget.historyService != null)
               _HistorySection(
@@ -543,39 +619,6 @@ class _PlayerPageState extends State<PlayerPage> {
                 _currentEpisodeIndex < _allEpisodes.length - 1
             ? _playNextEpisode
             : null,
-      ),
-    );
-  }
-
-  Widget _buildStreamInfo() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Colors.grey[900],
-      child: Row(
-        children: [
-          const Icon(Icons.link, size: 14, color: Colors.grey),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _streamUrl!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: Colors.grey,
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _copyStreamUrl,
-            child: const Icon(
-              Icons.copy_rounded,
-              size: 18,
-              color: Colors.orange,
-            ),
-          ),
-        ],
       ),
     );
   }

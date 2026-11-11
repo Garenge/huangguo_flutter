@@ -22,6 +22,11 @@ void main() {
     final page = tester.widget<PlayerPage>(find.byType(PlayerPage));
     expect(page.initialEpisode, episode);
     expect(find.byType(FavoriteButton), findsNothing);
+    home.onPlayEpisode(episode, [episode], '测试剧');
+    await tester.pump();
+    final repeated = tester.widget<PlayerPage>(find.byType(PlayerPage));
+    expect(repeated.playbackRequestId, page.playbackRequestId + 1);
+    expect(repeated.initialEpisode, episode);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));
   });

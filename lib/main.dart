@@ -130,6 +130,7 @@ class _MainShellState extends State<MainShell> {
   String? _pendingDramaId;
   Drama? _pendingDrama;
   Duration? _pendingStartPosition;
+  int _playbackRequestId = 0;
 
   // Nested navigator keys
   final _homeNavKey = GlobalKey<NavigatorState>();
@@ -232,6 +233,7 @@ class _MainShellState extends State<MainShell> {
     Drama? drama,
   }) {
     setState(() {
+      _playbackRequestId++;
       _pendingEpisode = episode;
       _pendingEpisodes = allEpisodes;
       _pendingDramaName = dramaName;
@@ -250,6 +252,7 @@ class _MainShellState extends State<MainShell> {
       ep: entry.ep,
     );
     setState(() {
+      _playbackRequestId++;
       _pendingEpisode = episode;
       _pendingEpisodes = [episode];
       _pendingDramaName = entry.dramaName;
@@ -384,6 +387,7 @@ class _MainShellState extends State<MainShell> {
           api: _api,
           htmlParser: _htmlParser,
           initialEpisode: _pendingEpisode,
+          playbackRequestId: _playbackRequestId,
           allEpisodes: _pendingEpisodes,
           downloadService: _downloadService,
           historyService: _historyService,

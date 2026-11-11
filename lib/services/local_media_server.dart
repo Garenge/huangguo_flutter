@@ -1,12 +1,8 @@
 import 'dart:io';
 
 /// 本地 HTTP 服务器，用于让 video_player 以 HLS 方式播放已下载的 m3u8 + TS 分片。
-/// 单例，每次播放时指定服务目录，播完关闭。
+/// 每个播放源独立持有服务，播完关闭。
 class LocalMediaServer {
-  static final LocalMediaServer _instance = LocalMediaServer._();
-  factory LocalMediaServer() => _instance;
-  LocalMediaServer._();
-
   HttpServer? _server;
   int _port = 0;
   String? _serveDir;

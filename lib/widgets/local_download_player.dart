@@ -12,7 +12,7 @@ import 'playback_scope.dart';
 import '../models/download_task.dart';
 import '../models/storage_usage.dart';
 import '../services/storage_file_scanner.dart';
-import '../services/local_media_server.dart';
+import '../services/local_playback_source.dart';
 import 'app_video_player.dart';
 import 'player_layout.dart';
 import 'library_scope.dart';
@@ -38,7 +38,7 @@ class LocalDownloadPlayer extends StatefulWidget {
 
 class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   LibraryService? _library;
-  final LocalMediaServer _server = LocalMediaServer();
+  LocalPlaybackSource? _localSource;
   VideoPlayerController? _controller;
   PlaybackSession? _session;
   PlaybackSettingsService? _ownedSettings;
@@ -111,37 +111,18 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     _loadGeneration++;
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
-    _server.stop();
+    _localSource?.dispose();
     super.dispose();
   }
 
-  bool _hasResource(DownloadTask task) {
-    final mp4Path = _mp4Path(task);
-    if (mp4Path != null && File(mp4Path).existsSync()) {
-      return true;
-    }
-    final m3u8Path = task.filePath;
-    return m3u8Path != null && File(m3u8Path).existsSync();
-  }
-
-  String? _mp4Path(DownloadTask task) {
-    if (task.mp4Path != null &&
-        task.mp4Path!.isNotEmpty &&
-        File(task.mp4Path!).existsSync()) {
-      return task.mp4Path;
-    }
-    final sourcePath = task.filePath;
-    if (sourcePath != null &&
-        sourcePath.toLowerCase().endsWith('.mp4') &&
-        File(sourcePath).existsSync()) {
-      return sourcePath;
-    }
-    return null;
-  }
+  bool _hasResource(DownloadTask task) =>
+      LocalPlaybackSource.forTask(task) != null;
 
   Future<void> _loadCurrentTask() async {
     final generation = ++_loadGeneration;
     final previous = _controller;
+    final previousSource = _localSource;
+    _localSource = null;
     previous?.removeListener(_onControllerChanged);
     setState(() {
       _controller = null;
@@ -152,7 +133,8 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     _session!.controller = null;
     await _session!.begin();
     await previous?.dispose();
-    _server.stop();
+    previousSource?.dispose();
+    if (!mounted || generation != _loadGeneration) return;
 
     VideoPlayerController? candidate;
     try {
@@ -184,17 +166,10 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
   }
 
   Future<VideoPlayerController> _createController(DownloadTask task) async {
-    final mp4Path = _mp4Path(task);
-    if (mp4Path != null) {
-      return VideoPlayerController.file(File(mp4Path));
-    }
-
-    final sourcePath = task.filePath;
-    if (sourcePath == null || !File(sourcePath).existsSync()) {
-      throw StateError('文件已丢失，请重新下载');
-    }
-    await _server.start(File(sourcePath).parent.path);
-    return VideoPlayerController.networkUrl(Uri.parse(_server.playlistUrl));
+    final source = LocalPlaybackSource.forTask(task);
+    if (source == null) throw StateError('文件已丢失，请重新下载');
+    _localSource = source;
+    return source.createController();
   }
 
   void _onControllerChanged() {
@@ -283,7 +258,7 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
     _session?.controller = null;
     await previous?.pause();
     await previous?.dispose();
-    _server.stop();
+    _localSource?.dispose();
   }
 
   Future<void> _confirmDeleteTask(DownloadTask task) async {
