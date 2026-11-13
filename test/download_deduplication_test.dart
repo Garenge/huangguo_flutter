@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huangguo_flutter/models/download_task.dart';
 
@@ -35,7 +37,10 @@ void main() {
         expect(result.addedCount, 0);
         expect(result.skippedCount, 2);
         expect(fixture.service.tasks, isEmpty);
-        expect(await resource.readAsString(), 'test resource');
+        final path = name.endsWith('.mp4')
+            ? '${fixture.root}/测试剧/测试剧-1.mp4'
+            : resource.path;
+        expect(await File(path).readAsString(), 'test resource');
         expect(
           fixture.service.isResourceDownloaded(dedupDrama, dedupEpisode),
           isTrue,
@@ -101,7 +106,10 @@ void main() {
   test('batch retries one failed task and skips repeated episode', () async {
     await fixture.seed(DownloadStatus.failed);
     final original = fixture.service.tasks.single;
-    final result = await fixture.service.addTasks(dedupDrama, [dedupEpisode, dedupEpisode]);
+    final result = await fixture.service.addTasks(dedupDrama, [
+      dedupEpisode,
+      dedupEpisode,
+    ]);
     expect(result.addedCount, 0);
     expect(result.retriedCount, 1);
     expect(result.skippedCount, 1);

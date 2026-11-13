@@ -14,6 +14,10 @@ import 'huangguo_api.dart';
 import 'stream_resolver.dart';
 import 'app_log.dart';
 import 'site_address.dart';
+import 'download_directory_migration.dart';
+import 'download_layout.dart';
+import 'download_resource_deletion.dart';
+import 'migration_storage.dart';
 
 const _log = AppLog('DownloadService');
 const _maxConcurrent = 2;
@@ -59,6 +63,8 @@ class DownloadService extends ChangeNotifier {
   String? _downloadRoot;
   bool _initialized = false;
   Future<void>? _initializing;
+  Future<void> _persisting = Future<void>.value();
+  bool _recordsReadable = true;
 
   DownloadService(this._api) : _downloadDio = Dio() {
     _resolver = StreamResolver(_api);
@@ -73,6 +79,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   String get downloadRoot => _downloadRoot ?? '';
+  DownloadLayout get layout => DownloadLayout(downloadRoot);
   List<DownloadTask> get tasks => List.unmodifiable(_tasks);
   List<DownloadTask> get downloadingTasks =>
       _tasks.where((t) => t.status == DownloadStatus.downloading).toList();
@@ -110,13 +117,18 @@ class DownloadService extends ChangeNotifier {
 
   bool isResourceDownloaded(Drama drama, Episode episode) {
     return isEpisodeDownloaded(drama.id, episode.ep) ||
+        layout.mp4Candidates(drama.id, episode.ep).isNotEmpty ||
         _directoryHasPlayableResource(
-          _episodeDir(drama.name, drama.id, episode.name),
+          layout.sourceDirectoryFor(drama.id, episode.ep),
+        ) ||
+        _directoryHasPlayableResource(
+          '${_dramaDir(drama.name, drama.id)}/${DownloadLayout.safeName(episode.name)}',
         );
   }
 
   bool _hasPlayableResource(DownloadTask task) {
     return _fileExists(task.mp4Path) ||
+        layout.mp4Candidates(task.dramaId, task.ep).isNotEmpty ||
         _directoryHasPlayableResource(episodeDirectoryFor(task));
   }
 
@@ -148,10 +160,15 @@ class DownloadService extends ChangeNotifier {
   }
 
   String episodeDirectoryFor(DownloadTask task) {
-    if (task.filePath != null && task.filePath!.isNotEmpty) {
+    if (task.filePath != null &&
+        task.filePath!.isNotEmpty &&
+        !task.filePath!.toLowerCase().endsWith('.mp4')) {
       return File(task.filePath!).parent.path;
     }
-    return _episodeDir(task.dramaName, task.dramaId, task.episodeName);
+    final legacy = layout.legacyDirectory(task);
+    return Directory(legacy).existsSync()
+        ? legacy
+        : layout.sourceDirectory(task);
   }
 
   Future<void> init() => _initializing ??= _initialize();
@@ -162,8 +179,13 @@ class DownloadService extends ChangeNotifier {
     _downloadRoot = '${appDir.path}/huangguo_downloads';
     await Directory(_downloadRoot!).create(recursive: true);
     await _loadFromDisk();
+    if (_recordsReadable) {
+      await DownloadDirectoryMigration(layout, _tasks, _persist).run();
+      await _validateLoadedTasks();
+    }
     _initialized = true;
     _log.i('init: downloadRoot=$_downloadRoot, tasks=${_tasks.length}');
+    notifyListeners();
     _resumePending();
   }
 
@@ -176,15 +198,6 @@ class DownloadService extends ChangeNotifier {
   String _dramaDir(String dramaName, String dramaId) {
     final safeName = dramaName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
     return '$_downloadRoot/$safeName ($dramaId)';
-  }
-
-  String _episodeDir(String dramaName, String dramaId, String episodeName) {
-    final safeEpName = episodeName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-    return '${_dramaDir(dramaName, dramaId)}/$safeEpName';
-  }
-
-  String _episodePath(String dramaName, String dramaId, String episodeName) {
-    return '${_episodeDir(dramaName, dramaId, episodeName)}/playlist.m3u8';
   }
 
   String _tmpDir(String taskId) => '$_downloadRoot/.tmp/$taskId';
@@ -314,6 +327,7 @@ class DownloadService extends ChangeNotifier {
     }
 
     task.filePath = null;
+    if (await episodeDir.list().isEmpty) await episodeDir.delete();
     _log.i(
       'deleteSourceFiles: taskId=$taskId, deleted=$deletedCount, '
       'directory=${episodeDir.path}',
@@ -380,12 +394,7 @@ class DownloadService extends ChangeNotifier {
       await tmpDir.delete(recursive: true);
     }
 
-    if (task.filePath != null) {
-      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
-      if (await epDir.exists()) {
-        await epDir.delete(recursive: true);
-      }
-    }
+    await DownloadResourceDeletion(layout).delete(task);
 
     _tasks.remove(task);
     _pendingQueue.remove(task);
@@ -393,23 +402,20 @@ class DownloadService extends ChangeNotifier {
     notifyListeners();
     await _persist();
     _processQueue();
-    _cleanupEmptyDirs();
+    await _cleanupEmptyDirs();
   }
 
   Future<void> deleteCompletedFile(String taskId) async {
     final task = _findTask(taskId);
     if (task == null || task.status != DownloadStatus.completed) return;
 
-    final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
-    if (await epDir.exists()) {
-      await epDir.delete(recursive: true);
-    }
+    await DownloadResourceDeletion(layout).delete(task);
 
     _tasks.remove(task);
     _log.i('deleteCompletedFile: $taskId');
     notifyListeners();
     await _persist();
-    _cleanupEmptyDirs();
+    await _cleanupEmptyDirs();
   }
 
   Future<void> deleteCompletedFiles(Iterable<String> taskIds) async {
@@ -421,14 +427,13 @@ class DownloadService extends ChangeNotifier {
     if (tasks.isEmpty) return;
 
     for (final task in tasks) {
-      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
-      if (await epDir.exists()) await epDir.delete(recursive: true);
+      await DownloadResourceDeletion(layout).delete(task);
     }
     _tasks.removeWhere((task) => tasks.contains(task));
     _log.i('deleteCompletedFiles: deleted=${tasks.length}');
     notifyListeners();
     await _persist();
-    _cleanupEmptyDirs();
+    await _cleanupEmptyDirs();
   }
 
   DownloadTask? _findTask(String taskId) {
@@ -527,7 +532,7 @@ class DownloadService extends ChangeNotifier {
       }
       await tmpDir.create(recursive: true);
 
-      final epDir = Directory(_episodeDir(task.dramaName, task.dramaId, task.episodeName));
+      final epDir = Directory(layout.sourceDirectory(task));
       if (await epDir.exists()) {
         await epDir.delete(recursive: true);
       }
@@ -582,7 +587,7 @@ class DownloadService extends ChangeNotifier {
       _log.i('_downloadTask: moved ${tsFiles.length} TS segments to $epDir');
 
       // 7. 生成本地 m3u8 播放列表（含密钥引用）
-      final m3u8Path = _episodePath(task.dramaName, task.dramaId, task.episodeName);
+      final m3u8Path = '${epDir.path}/playlist.m3u8';
       final m3u8Content = _buildLocalM3u8(segments, downloadedKeys);
       await File(m3u8Path).writeAsString(m3u8Content);
       _log.i('_downloadTask: m3u8 written to $m3u8Path');
@@ -824,9 +829,14 @@ class DownloadService extends ChangeNotifier {
 
   Future<void> _persist() async {
     if (_downloadRoot == null) return;
+    if (!_recordsReadable) throw StateError('下载记录损坏，保留原记录');
     final metaFile = File('$_downloadRoot/$_metaFileName');
     final json = _tasks.map((t) => t.toJson(downloadRoot: _downloadRoot!)).toList();
-    await metaFile.writeAsString(jsonEncode(json));
+    final pending = _persisting.then((_) => writeMigrationJson(metaFile, json));
+    _persisting = pending.catchError((Object error, StackTrace stack) {
+      _log.e('download_service.dart::_persist: 下载记录保存失败', error, stack);
+    });
+    await pending;
   }
 
   Future<void> _loadFromDisk() async {
@@ -843,22 +853,28 @@ class DownloadService extends ChangeNotifier {
           item as Map<String, dynamic>,
           downloadRoot: _downloadRoot!,
         );
-        if (task.status == DownloadStatus.completed && task.filePath != null) {
-          if (!await File(task.filePath!).exists() &&
-              !_hasPlayableResource(task)) {
-            task.status = DownloadStatus.failed;
-            task.errorMessage = '文件已丢失';
-          }
-        }
-        if (task.mp4Path != null && !await File(task.mp4Path!).exists()) {
-          task.mp4Path = null;
-        }
-
         _tasks.add(task);
       }
       _log.i('_loadFromDisk: loaded ${_tasks.length} tasks');
     } catch (e, stack) {
+      _recordsReadable = false;
+      _tasks.clear();
       _log.e('_loadFromDisk: failed', e, stack);
     }
+  }
+
+  Future<void> _validateLoadedTasks() async {
+    for (final task in _tasks) {
+      if (task.status == DownloadStatus.completed &&
+          !_hasEpisodeResource(task) &&
+          !_hasPlayableResource(task)) {
+        task.status = DownloadStatus.failed;
+        task.errorMessage = '文件已丢失';
+      }
+      if (task.mp4Path != null && !await File(task.mp4Path!).exists()) {
+        task.mp4Path = null;
+      }
+    }
+    await _persist();
   }
 }

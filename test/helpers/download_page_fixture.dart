@@ -15,8 +15,12 @@ import 'package:huangguo_flutter/widgets/library_scope.dart';
 class TestDownloadService extends DownloadService {
   final List<DownloadTask> completed;
   bool hasPendingTasks = false;
+  final String? root;
 
-  TestDownloadService(super.api, this.completed);
+  TestDownloadService(super.api, this.completed, {this.root});
+
+  @override
+  String get downloadRoot => root ?? super.downloadRoot;
 
   @override
   List<DownloadTask> get completedTasks => List.unmodifiable(completed);
@@ -64,6 +68,7 @@ Future<TestDownloadService> mountDownloads(
   TestAlbumApi? albumApi,
   bool hasPendingTasks = false,
   StorageUsageService? storageUsageService,
+  String? downloadRoot,
 }) async {
   if (downloadSettings == null) {
     final directory = Directory.systemTemp.createTempSync('download_page_sort');
@@ -80,6 +85,7 @@ Future<TestDownloadService> mountDownloads(
           ...albumTasks('B', 25),
           ...albumTasks('C', 25),
         ],
+    root: downloadRoot,
   );
   service.hasPendingTasks = hasPendingTasks;
   addTearDown(() async {
@@ -118,7 +124,7 @@ ScrollPosition completedPosition(WidgetTester tester) => tester
     )
     .position;
 
-Finder albumHeader(String dramaId) => find.text('测试剧$dramaId ($dramaId)');
+Finder albumHeader(String dramaId) => find.text('测试剧$dramaId');
 
 Future<void> jumpDownloads(WidgetTester tester, double offset) async {
   completedPosition(tester).jumpTo(offset);

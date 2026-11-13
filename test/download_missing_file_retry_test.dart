@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huangguo_flutter/models/download_task.dart';
 
@@ -14,7 +16,7 @@ void main() {
       final file = await fixture.resource('episode.mp4');
       await fixture.seed(DownloadStatus.completed, filePath: file.path);
       final task = fixture.service.tasks.single;
-      await file.delete();
+      await File(task.filePath!).delete();
       final states = <DownloadStatus>[];
       fixture.service.addListener(() => states.add(task.status));
       await fixture.service.resumeTask(task.id);

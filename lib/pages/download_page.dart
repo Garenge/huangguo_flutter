@@ -430,7 +430,7 @@ class _DownloadPageState extends State<DownloadPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        dramaKey,
+                        _ds.layout.albumName(tasks.first),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,

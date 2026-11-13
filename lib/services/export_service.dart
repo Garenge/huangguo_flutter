@@ -20,18 +20,8 @@ class ExportResult {
 
 /// MP4 导出服务：将已下载的 HLS 分片（加密 TS）重封装为 MP4。
 ///
-/// 输出路径由调用方决定，批量转换会将 MP4 保存在对应剧集目录。
+/// 输出路径由调用方决定，下载转换将 MP4 集中保存在剧目录。
 class ExportService {
-  /// 构建剧集目录内的稳定 MP4 路径。
-  static String outputPath({
-    required String m3u8Dir,
-    required String episodeName,
-  }) {
-    final safeEp = episodeName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-    final fileName = safeEp.isEmpty ? 'converted' : safeEp;
-    return '$m3u8Dir/$fileName.mp4';
-  }
-
   /// 构建临时输出路径：临时目录/剧名_第X集_时间戳.mp4
   static Future<String> tempOutputPath({
     required String dramaName,

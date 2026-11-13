@@ -44,6 +44,13 @@ class LocalPlaybackSource {
       );
       if (source != null) return source;
     }
+    if (lookup.dramaId case final String id) {
+      for (final path in downloads.layout.mp4Candidates(id, ep)) {
+        return LocalPlaybackSource(path);
+      }
+      final source = forDirectory(downloads.layout.sourceDirectoryFor(id, ep));
+      if (source != null) return source;
+    }
     for (final directory in lookup.directories) {
       final source = forDirectory(directory);
       if (source != null) return source;
@@ -70,9 +77,11 @@ class LocalPlaybackSource {
   }
 
   static String? _taskDirectory(DownloadTask task) {
-    for (final path in [task.filePath, task.mp4Path]) {
-      if (path != null && path.isNotEmpty) return File(path).parent.path;
+    final path = task.filePath;
+    if (path != null && path.toLowerCase().endsWith('.m3u8')) {
+      return File(path).parent.path;
     }
+    // MP4 的父目录由整部剧共享，不能扫描并误播其他集。
     return null;
   }
 

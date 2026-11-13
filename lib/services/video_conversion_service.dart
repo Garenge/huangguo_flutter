@@ -44,6 +44,7 @@ class VideoConversionService {
     }
 
     final m3u8Dir = m3u8File.parent.path;
+    await _downloadService.layout.prepareAlbum(task);
     final expectedOutputPath = expectedMp4Path(task);
     final savedOutputPath = task.mp4Path;
     final outputPath =
@@ -157,11 +158,7 @@ class VideoConversionService {
   }
 
   String expectedMp4Path(DownloadTask task) {
-    final m3u8Dir = _downloadService.episodeDirectoryFor(task);
-    return ExportService.outputPath(
-      m3u8Dir: m3u8Dir,
-      episodeName: task.episodeName,
-    );
+    return _downloadService.layout.mp4Path(task);
   }
 
   Future<void> _logReused(DownloadTask task, String mp4Path) =>

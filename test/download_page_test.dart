@@ -102,8 +102,8 @@ void main() {
     await tester.enterText(search, 'ceshijua');
     await tester.pumpAndSettle();
 
-    expect(find.text('测试剧A (A)'), findsOneWidget);
-    expect(find.text('测试剧B (B)'), findsNothing);
+    expect(find.text('测试剧A'), findsOneWidget);
+    expect(find.text('测试剧B'), findsNothing);
     expect(find.text('找到 25 / 75 集'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -116,7 +116,7 @@ void main() {
     expect(find.text('没有匹配的已下载资源'), findsOneWidget);
     await tester.tap(find.text('清除搜索').last);
     await tester.pumpAndSettle();
-    expect(find.text('测试剧A (A)'), findsOneWidget);
+    expect(find.text('测试剧A'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -68,6 +68,7 @@ class StorageUsageService {
         if ((task.filePath?.isNotEmpty ?? false) ||
             downloads.downloadRoot.isNotEmpty)
           downloads.episodeDirectoryFor(task),
+        if (task.filePath case final String path when path.isNotEmpty) path,
         if (task.mp4Path case final String path when path.isNotEmpty) path,
       ],
   };
