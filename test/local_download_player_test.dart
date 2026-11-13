@@ -95,11 +95,16 @@ void main() {
     await mountLocalDownloads(tester);
     final bounds = tester.getRect(find.byType(AppVideoPlayer));
     final controller = localPlayer(tester).controller;
+    expect(localPlayer(tester).onBack, isNull);
+    expect(find.byType(AppBar), findsOneWidget);
     await tester.tap(find.byTooltip('全屏'));
     await pumpLocalPlayer(tester);
-    await tester.tap(find.byTooltip('退出全屏'));
+    expect(find.byTooltip('返回'), findsOneWidget);
+    await tester.tap(find.byTooltip('返回'));
     await pumpLocalPlayer(tester);
     await pumpLocalPlayer(tester);
+    expect(localPlayer(tester).onBack, isNull);
+    expect(find.byType(AppBar), findsOneWidget);
     expect(find.byType(ListView).hitTestable(), findsOneWidget);
     final position = tester
         .state<ScrollableState>(find.byType(Scrollable))

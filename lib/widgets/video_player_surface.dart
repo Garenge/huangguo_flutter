@@ -47,6 +47,8 @@ class VideoPlayerSurface extends StatefulWidget {
 class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
     with WidgetsBindingObserver {
   Timer? _hideTimer;
+  Timer? _volumeTimer;
+  int? _volumePercent;
   bool _visible = true;
   bool _menuOpen = false;
   bool _seeking = false;
@@ -81,6 +83,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   void didUpdateWidget(covariant VideoPlayerSurface oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != _controller) {
+      _resetVolumeHint();
       _seekGeneration++;
       oldWidget.controller?.removeListener(_onValueChanged);
       _controller?.addListener(_onValueChanged);
@@ -91,7 +94,10 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
       _wasPlaying = _controller?.value.isPlaying ?? false;
       _scheduleHide();
     }
-    if (oldWidget.active && !widget.active) _cancelInteraction();
+    if (oldWidget.active && !widget.active) {
+      _resetVolumeHint();
+      _cancelInteraction();
+    }
     if (!oldWidget.active && widget.active) _scheduleHide();
   }
 
@@ -99,6 +105,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
+    _resetVolumeHint();
     _controller?.removeListener(_onValueChanged);
     _restoreSpeed();
     super.dispose();
@@ -157,6 +164,19 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
   void _toggleControls() {
     setState(() => _visible = !_visible);
     _scheduleHide();
+  }
+
+  void _resetVolumeHint() {
+    _volumeTimer?.cancel();
+    _volumePercent = null;
+  }
+
+  void _showVolume(double volume) {
+    _volumeTimer?.cancel();
+    setState(() => _volumePercent = (volume * 100).round());
+    _volumeTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _volumePercent = null);
+    });
   }
 
   Future<void> _playPause() async {
@@ -509,6 +529,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
           minimum: const EdgeInsets.all(12),
           child: _buildMessage('2.0x 快进中', alignment: Alignment.bottomRight),
         ),
+      if (_volumePercent != null) _buildMessage('音量 $_volumePercent%'),
     ];
   }
 
@@ -519,6 +540,7 @@ class _VideoPlayerSurfaceState extends State<VideoPlayerSurface>
       enabled:
           widget.active && _ready && !_menuOpen && !_seeking && !_fastForward,
       onPlayPause: _playPause,
+      onVolumeChanged: _showVolume,
       onSeek: () {
         setState(() => _visible = true);
         _scheduleHide();

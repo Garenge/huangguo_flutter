@@ -12,6 +12,7 @@ class PlaybackKeyboardShortcuts extends StatefulWidget {
     required this.enabled,
     required this.onPlayPause,
     required this.onSeek,
+    this.onVolumeChanged,
     required this.child,
   });
 
@@ -19,6 +20,7 @@ class PlaybackKeyboardShortcuts extends StatefulWidget {
   final bool enabled;
   final Future<void> Function() onPlayPause;
   final VoidCallback onSeek;
+  final ValueChanged<double>? onVolumeChanged;
   final Widget child;
 
   @override
@@ -90,16 +92,40 @@ class _PlaybackKeyboardShortcutsState extends State<PlaybackKeyboardShortcuts> {
     final key = event.logicalKey;
     if (key != LogicalKeyboardKey.space &&
         key != LogicalKeyboardKey.arrowLeft &&
-        key != LogicalKeyboardKey.arrowRight) {
+        key != LogicalKeyboardKey.arrowRight &&
+        key != LogicalKeyboardKey.arrowUp &&
+        key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
     }
     if (event is KeyUpEvent) return KeyEventResult.handled;
     if (key == LogicalKeyboardKey.space) {
       if (event is KeyDownEvent) _enqueue(widget.onPlayPause);
     } else if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      _seek(key == LogicalKeyboardKey.arrowLeft ? -5 : 5);
+      _handleArrow(key);
     }
     return KeyEventResult.handled;
+  }
+
+  void _handleArrow(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      _changeVolume(key == LogicalKeyboardKey.arrowUp ? 0.05 : -0.05);
+    } else {
+      _seek(key == LogicalKeyboardKey.arrowLeft ? -5 : 5);
+    }
+  }
+
+  void _changeVolume(double delta) {
+    final controller = widget.controller;
+    final generation = _generation;
+    if (controller == null) return;
+    _enqueue(() async {
+      final volume = (controller.value.volume + delta).clamp(0.0, 1.0);
+      await controller.setVolume(volume);
+      if (mounted && generation == _generation) {
+        widget.onVolumeChanged?.call(volume);
+      }
+    });
   }
 
   void _enqueue(Future<void> Function() action, {VoidCallback? onDone}) {

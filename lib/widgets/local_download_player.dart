@@ -312,7 +312,6 @@ class _LocalDownloadPlayerState extends State<LocalDownloadPlayer> {
                 loading: _loading,
                 error: _error,
                 onRetry: _loadCurrentTask,
-                onBack: () => Navigator.of(context).pop(),
                 onPrevious: index > 0 ? _playPrevious : null,
                 onNext: index >= 0 && index < _tasks.length - 1
                     ? _playNext

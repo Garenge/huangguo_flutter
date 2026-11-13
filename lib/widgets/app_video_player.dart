@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 
 import '../services/app_log.dart';
 import '../services/playback_window_title.dart';
+import 'fullscreen_keyboard_shortcuts.dart';
 import 'video_player_surface.dart';
 import '../services/playback_session.dart';
 import 'playback_route_guard.dart';
@@ -172,6 +173,10 @@ class _AppVideoPlayerState extends State<AppVideoPlayer> {
   }
 
   Widget _buildFullscreen(BuildContext context) {
+    return FullscreenKeyboardShortcuts(child: _buildFullscreenSurface());
+  }
+
+  Widget _buildFullscreenSurface() {
     return Scaffold(
       backgroundColor: Colors.black,
       body: ValueListenableBuilder<AppVideoPlayer>(
